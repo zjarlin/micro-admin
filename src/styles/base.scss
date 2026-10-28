@@ -1,0 +1,54 @@
+:root {
+  --app-bg: #f4f6fa;
+  --app-text: #101828;
+  --muted: #667085;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --line: #e6ebf2;
+  --line-strong: #cbd5e1;
+  --hover: #f1f5f9;
+  --radius: 14px;
+  color-scheme: light;
+}
+
+html.dark {
+  --app-bg: #0d1424;
+  --app-text: #e7edf7;
+  --muted: #94a3b8;
+  --surface: #131c2e;
+  --surface-soft: #18233a;
+  --line: #24324a;
+  --line-strong: #334155;
+  --hover: #1b2940;
+  color-scheme: dark;
+
+  /* 让 Element Plus 组件跟随宿主设计变量，而不是官方纯黑暗色底。 */
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--app-bg);
+  --el-bg-color-overlay: var(--surface-soft);
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: #cbd5e1;
+  --el-text-color-secondary: var(--muted);
+  --el-border-color: var(--line);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: #1f2a40;
+  --el-fill-color: var(--surface-soft);
+  --el-fill-color-light: var(--surface-soft);
+  --el-fill-color-lighter: var(--surface-soft);
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-dark: var(--hover);
+  --el-mask-color: rgba(2, 6, 23, .72);
+  --el-table-bg-color: var(--surface);
+  --el-table-tr-bg-color: var(--surface);
+  --el-table-header-bg-color: var(--surface-soft);
+  --el-table-row-hover-bg-color: var(--hover);
+  --el-table-border-color: var(--line);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { min-height: 100%; margin: 0; }
+body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--app-bg); color: var(--app-text); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; }
+a { color: inherit; }
+code { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+::selection { background: #bfdbfe; color: #0f172a; }

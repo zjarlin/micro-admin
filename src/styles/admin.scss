@@ -1,0 +1,27 @@
+/* 若依式页面密度的统一壳层；页面只声明内容，不重复写容器样式。 */
+.page { display: flex; flex-direction: column; gap: 18px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.page-head h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; color: var(--app-text); }
+.page-head p { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; max-width: 72ch; }
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.panel-title h2 { margin: 0; font-size: 16px; color: var(--app-text); }
+.panel-title span { color: var(--muted); font-size: 12px; }
+.filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.filter-bar .el-input { width: 230px; }
+.filter-bar .el-select { width: 130px; }
+.table-footer { display: flex; justify-content: flex-end; margin-top: 16px; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.status-dot.ok { background: #12b76a; }
+.status-dot.warn { background: #f79009; }
+.status-dot.bad { background: #f04438; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.metric-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.metric-card span { color: var(--muted); font-size: 12px; }
+.metric-card strong { display: block; margin-top: 8px; font-size: 30px; letter-spacing: -.03em; color: var(--app-text); }
+.metric-card small { display: block; margin-top: 8px; color: #12b76a; font-size: 12px; }
+@media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .page-head { flex-direction: column; } .metric-grid { grid-template-columns: 1fr; } .filter-bar .el-input { width: 100%; } }
