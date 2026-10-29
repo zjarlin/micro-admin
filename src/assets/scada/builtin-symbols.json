@@ -1,0 +1,1183 @@
+{
+  "version": 1,
+  "symbols": [
+    {
+      "key": "basic.rect",
+      "name": "矩形",
+      "category": "basic",
+      "defaultWidth": 160,
+      "defaultHeight": 100,
+      "description": "基础矩形，可用作背景块或区域框",
+      "palette": {
+        "body": "#1e293b",
+        "border": "#475569",
+        "text": "#e2e8f0"
+      },
+      "props": [
+        {
+          "key": "fillColor",
+          "label": "填充色",
+          "kind": "color",
+          "default": "#1e293b",
+          "group": "外观"
+        },
+        {
+          "key": "strokeColor",
+          "label": "边框色",
+          "kind": "color",
+          "default": "#475569",
+          "group": "外观"
+        },
+        {
+          "key": "strokeWidth",
+          "label": "边框宽度",
+          "kind": "number",
+          "default": 1,
+          "group": "外观",
+          "min": 0,
+          "max": 8
+        },
+        {
+          "key": "radius",
+          "label": "圆角",
+          "kind": "number",
+          "default": 6,
+          "group": "外观",
+          "min": 0,
+          "max": 48
+        }
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "fillColor",
+          "stroke": "strokeColor",
+          "strokeWidth": 1,
+          "cornerRadius": 6
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "basic.text",
+      "name": "文本",
+      "category": "basic",
+      "defaultWidth": 160,
+      "defaultHeight": 36,
+      "palette": {
+        "text": "#e2e8f0"
+      },
+      "props": [
+        {
+          "key": "content",
+          "label": "文本内容",
+          "kind": "text",
+          "default": "文本",
+          "group": "内容"
+        },
+        {
+          "key": "fontSize",
+          "label": "字号",
+          "kind": "number",
+          "default": 16,
+          "group": "外观",
+          "min": 8,
+          "max": 72
+        },
+        {
+          "key": "color",
+          "label": "颜色",
+          "kind": "color",
+          "default": "#e2e8f0",
+          "group": "外观"
+        }
+      ],
+      "parts": [
+        {
+          "id": "label",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "color",
+          "textProp": "content",
+          "fontSize": 16,
+          "fontSizeProp": "fontSize"
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "display.value",
+      "name": "数值显示",
+      "category": "instrument",
+      "defaultWidth": 180,
+      "defaultHeight": 72,
+      "description": "显示一个通道变量的工程值，含标签与单位",
+      "palette": {
+        "body": "#0b1220",
+        "border": "#334155",
+        "text": "#38bdf8",
+        "captionText": "#94a3b8",
+        "accent": "#475569"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "标签",
+          "kind": "text",
+          "default": "数值",
+          "group": "内容"
+        },
+        {
+          "key": "fontSize",
+          "label": "数值字号",
+          "kind": "number",
+          "default": 28,
+          "group": "外观",
+          "min": 10,
+          "max": 72
+        }
+      ],
+      "bindingSlots": [
+        {
+          "key": "value",
+          "label": "数值变量",
+          "style": "valueText",
+          "precision": 2
+        },
+        {
+          "key": "alarm",
+          "label": "报警状态色",
+          "style": "stateColor"
+        }
+      ],
+      "parts": [
+        {
+          "id": "panel",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 1,
+          "cornerRadius": 6
+        },
+        {
+          "id": "caption",
+          "shape": "text",
+          "frame": {
+            "x": 0.04,
+            "y": 0.05,
+            "width": 0.92,
+            "height": 0.3
+          },
+          "fill": "captionText",
+          "textProp": "caption",
+          "fontSize": 12
+        },
+        {
+          "id": "value",
+          "shape": "text",
+          "frame": {
+            "x": 0.04,
+            "y": 0.35,
+            "width": 0.92,
+            "height": 0.6
+          },
+          "fill": "text",
+          "textSlot": "value",
+          "fontSize": 28,
+          "bold": true,
+          "fontSizeProp": "fontSize"
+        },
+        {
+          "id": "alarmDot",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0.86,
+            "y": 0.1,
+            "width": 0.08,
+            "height": 0.2
+          },
+          "fill": "accent",
+          "bindingSlot": "alarm"
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "display.gauge",
+      "name": "仪表盘",
+      "category": "instrument",
+      "defaultWidth": 180,
+      "defaultHeight": 180,
+      "description": "指针式表盘，量程可配",
+      "palette": {
+        "body": "#0b1220",
+        "border": "#475569",
+        "text": "#e2e8f0",
+        "needle": "#f97316"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "标签",
+          "kind": "text",
+          "default": "压力",
+          "group": "内容"
+        }
+      ],
+      "bindingSlots": [
+        {
+          "key": "needle",
+          "label": "指针变量",
+          "style": "needle",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "key": "value",
+          "label": "数值文本",
+          "style": "valueText",
+          "precision": 2
+        }
+      ],
+      "parts": [
+        {
+          "id": "dial",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2
+        },
+        {
+          "id": "inner",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "fill": "border"
+        },
+        {
+          "id": "caption",
+          "shape": "text",
+          "frame": {
+            "x": 0.15,
+            "y": 0.62,
+            "width": 0.7,
+            "height": 0.16
+          },
+          "fill": "text",
+          "textProp": "caption",
+          "fontSize": 13
+        },
+        {
+          "id": "value",
+          "shape": "text",
+          "frame": {
+            "x": 0.15,
+            "y": 0.74,
+            "width": 0.7,
+            "height": 0.18
+          },
+          "fill": "text",
+          "textSlot": "value",
+          "fontSize": 16,
+          "bold": true
+        },
+        {
+          "id": "needle",
+          "shape": "polygon",
+          "frame": {
+            "x": 0.45,
+            "y": 0.08,
+            "width": 0.1,
+            "height": 0.84
+          },
+          "fill": "needle",
+          "bindingSlot": "needle"
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "display.bar",
+      "name": "液位柱",
+      "category": "instrument",
+      "defaultWidth": 90,
+      "defaultHeight": 220,
+      "description": "按变量 0..1 比例填充的柱状指示",
+      "palette": {
+        "body": "#0b1220",
+        "border": "#475569",
+        "fill": "#22d3ee",
+        "text": "#e2e8f0"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "标签",
+          "kind": "text",
+          "default": "液位",
+          "group": "内容"
+        }
+      ],
+      "bindingSlots": [
+        {
+          "key": "level",
+          "label": "填充变量",
+          "style": "fillRatio",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "key": "value",
+          "label": "数值文本",
+          "style": "valueText",
+          "precision": 1,
+          "unit": "%"
+        }
+      ],
+      "parts": [
+        {
+          "id": "frame",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 0.88
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2,
+          "cornerRadius": 4
+        },
+        {
+          "id": "fill",
+          "shape": "fillBar",
+          "frame": {
+            "x": 0.06,
+            "y": 0.06,
+            "width": 0.88,
+            "height": 0.76
+          },
+          "fill": "fill",
+          "bindingSlot": "level",
+          "cornerRadius": 2
+        },
+        {
+          "id": "value",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0.88,
+            "width": 1,
+            "height": 0.12
+          },
+          "fill": "text",
+          "textSlot": "value",
+          "fontSize": 13,
+          "bold": true
+        },
+        {
+          "id": "caption",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0.02,
+            "width": 1,
+            "height": 0.08
+          },
+          "fill": "text",
+          "textProp": "caption",
+          "fontSize": 11
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "control.indicator",
+      "name": "指示灯",
+      "category": "control",
+      "defaultWidth": 72,
+      "defaultHeight": 80,
+      "description": "按变量状态切换颜色的指示灯",
+      "palette": {
+        "body": "#334155",
+        "border": "#0b1220",
+        "text": "#e2e8f0"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "标签",
+          "kind": "text",
+          "default": "运行",
+          "group": "内容"
+        }
+      ],
+      "bindingSlots": [
+        {
+          "key": "state",
+          "label": "状态变量",
+          "style": "stateColor"
+        }
+      ],
+      "parts": [
+        {
+          "id": "ring",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0.06,
+            "y": 0.02,
+            "width": 0.88,
+            "height": 0.72
+          },
+          "fill": "border"
+        },
+        {
+          "id": "lamp",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0.12,
+            "y": 0.06,
+            "width": 0.76,
+            "height": 0.62
+          },
+          "fill": "body",
+          "bindingSlot": "state"
+        },
+        {
+          "id": "caption",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0.76,
+            "width": 1,
+            "height": 0.22
+          },
+          "fill": "text",
+          "textProp": "caption",
+          "fontSize": 12
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "control.button",
+      "name": "按钮",
+      "category": "control",
+      "defaultWidth": 120,
+      "defaultHeight": 48,
+      "description": "组态操作按钮（写入通道值）",
+      "palette": {
+        "body": "#1d4ed8",
+        "text": "#f8fafc"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "按钮文字",
+          "kind": "text",
+          "default": "启动",
+          "group": "内容"
+        },
+        {
+          "key": "color",
+          "label": "底色",
+          "kind": "color",
+          "default": "#1d4ed8",
+          "group": "外观"
+        }
+      ],
+      "parts": [
+        {
+          "id": "bg",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "color",
+          "cornerRadius": 6
+        },
+        {
+          "id": "label",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "text",
+          "textProp": "caption",
+          "fontSize": 16,
+          "bold": true
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "machine.pump",
+      "name": "泵",
+      "category": "machine",
+      "defaultWidth": 140,
+      "defaultHeight": 140,
+      "palette": {
+        "body": "#1e293b",
+        "border": "#64748b",
+        "accent": "#22c55e",
+        "text": "#e2e8f0"
+      },
+      "bindingSlots": [
+        {
+          "key": "run",
+          "label": "运行状态色",
+          "style": "stateColor"
+        }
+      ],
+      "parts": [
+        {
+          "id": "shell",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0.08,
+            "y": 0.12,
+            "width": 0.84,
+            "height": 0.76
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2
+        },
+        {
+          "id": "impeller",
+          "shape": "polygon",
+          "frame": {
+            "x": 0.28,
+            "y": 0.32,
+            "width": 0.44,
+            "height": 0.36
+          },
+          "fill": "accent",
+          "bindingSlot": "run",
+          "points": [
+            [
+              0.5,
+              0.0
+            ],
+            [
+              0.95,
+              0.32
+            ],
+            [
+              0.78,
+              0.9
+            ],
+            [
+              0.22,
+              0.9
+            ],
+            [
+              0.05,
+              0.32
+            ]
+          ]
+        },
+        {
+          "id": "outlet",
+          "shape": "rect",
+          "frame": {
+            "x": 0.42,
+            "y": 0,
+            "width": 0.16,
+            "height": 0.16
+          },
+          "fill": "border"
+        }
+      ],
+      "ports": [
+        {
+          "id": "inlet",
+          "label": "入口",
+          "position": [
+            0.0,
+            0.5
+          ],
+          "angle": 180,
+          "kind": "pipe"
+        },
+        {
+          "id": "outlet",
+          "label": "出口",
+          "position": [
+            0.5,
+            0.0
+          ],
+          "angle": 270,
+          "kind": "pipe"
+        }
+      ]
+    },
+    {
+      "key": "machine.fan",
+      "name": "风机",
+      "category": "machine",
+      "defaultWidth": 140,
+      "defaultHeight": 140,
+      "palette": {
+        "body": "#1e293b",
+        "border": "#64748b",
+        "accent": "#38bdf8"
+      },
+      "bindingSlots": [
+        {
+          "key": "run",
+          "label": "运行状态色",
+          "style": "stateColor"
+        }
+      ],
+      "parts": [
+        {
+          "id": "shell",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0.05,
+            "y": 0.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2,
+          "cornerRadius": 10
+        },
+        {
+          "id": "blade",
+          "shape": "polygon",
+          "frame": {
+            "x": 0.2,
+            "y": 0.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "fill": "accent",
+          "bindingSlot": "run",
+          "points": [
+            [
+              0.5,
+              0.05
+            ],
+            [
+              0.95,
+              0.5
+            ],
+            [
+              0.5,
+              0.95
+            ],
+            [
+              0.05,
+              0.5
+            ]
+          ]
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "vessel.tank",
+      "name": "储罐",
+      "category": "vessel",
+      "defaultWidth": 160,
+      "defaultHeight": 220,
+      "palette": {
+        "body": "#0b1220",
+        "border": "#64748b",
+        "fill": "#0ea5e9",
+        "text": "#e2e8f0"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "名称",
+          "kind": "text",
+          "default": "储罐",
+          "group": "内容"
+        }
+      ],
+      "bindingSlots": [
+        {
+          "key": "level",
+          "label": "液位变量",
+          "style": "fillRatio",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "key": "value",
+          "label": "液位文本",
+          "style": "valueText",
+          "precision": 1,
+          "unit": "%"
+        }
+      ],
+      "parts": [
+        {
+          "id": "shell",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2,
+          "cornerRadius": 8
+        },
+        {
+          "id": "liquid",
+          "shape": "fillBar",
+          "frame": {
+            "x": 0.04,
+            "y": 0.2,
+            "width": 0.92,
+            "height": 0.76
+          },
+          "fill": "fill",
+          "bindingSlot": "level",
+          "cornerRadius": 4
+        },
+        {
+          "id": "caption",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0.02,
+            "width": 1,
+            "height": 0.12
+          },
+          "fill": "text",
+          "textProp": "caption",
+          "fontSize": 13,
+          "bold": true
+        },
+        {
+          "id": "value",
+          "shape": "text",
+          "frame": {
+            "x": 0,
+            "y": 0.14,
+            "width": 1,
+            "height": 0.1
+          },
+          "fill": "text",
+          "textSlot": "value",
+          "fontSize": 12
+        }
+      ],
+      "ports": [
+        {
+          "id": "inlet",
+          "label": "进料",
+          "position": [
+            0.5,
+            0.0
+          ],
+          "angle": 270,
+          "kind": "pipe"
+        },
+        {
+          "id": "outlet",
+          "label": "出料",
+          "position": [
+            0.5,
+            1.0
+          ],
+          "angle": 90,
+          "kind": "pipe"
+        }
+      ]
+    },
+    {
+      "key": "pipe.valve",
+      "name": "阀门",
+      "category": "pipe",
+      "defaultWidth": 80,
+      "defaultHeight": 80,
+      "palette": {
+        "body": "#1e293b",
+        "border": "#94a3b8",
+        "accent": "#22c55e"
+      },
+      "bindingSlots": [
+        {
+          "key": "state",
+          "label": "开关状态色",
+          "style": "stateColor"
+        }
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "shape": "polygon",
+          "frame": {
+            "x": 0.1,
+            "y": 0.28,
+            "width": 0.8,
+            "height": 0.44
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2,
+          "points": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "body2",
+          "shape": "polygon",
+          "frame": {
+            "x": 0.1,
+            "y": 0.28,
+            "width": 0.8,
+            "height": 0.44
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2,
+          "points": [
+            [
+              1.0,
+              0.0
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "stem",
+          "shape": "rect",
+          "frame": {
+            "x": 0.46,
+            "y": 0.05,
+            "width": 0.08,
+            "height": 0.3
+          },
+          "fill": "accent",
+          "bindingSlot": "state"
+        }
+      ],
+      "ports": [
+        {
+          "id": "left",
+          "label": "左",
+          "position": [
+            0.0,
+            0.5
+          ],
+          "angle": 180,
+          "kind": "pipe"
+        },
+        {
+          "id": "right",
+          "label": "右",
+          "position": [
+            1.0,
+            0.5
+          ],
+          "angle": 0,
+          "kind": "pipe"
+        }
+      ]
+    },
+    {
+      "key": "pipe.line-h",
+      "name": "水平管道",
+      "category": "pipe",
+      "defaultWidth": 240,
+      "defaultHeight": 24,
+      "palette": {
+        "body": "#64748b"
+      },
+      "props": [
+        {
+          "key": "thickness",
+          "label": "管径",
+          "kind": "number",
+          "default": 10,
+          "group": "外观",
+          "min": 1,
+          "max": 48
+        }
+      ],
+      "parts": [
+        {
+          "id": "pipe",
+          "shape": "rect",
+          "frame": {
+            "x": 0,
+            "y": 0.35,
+            "width": 1,
+            "height": 0.3
+          },
+          "fill": "body"
+        }
+      ],
+      "ports": [
+        {
+          "id": "left",
+          "label": "左",
+          "position": [
+            0.0,
+            0.5
+          ],
+          "angle": 180,
+          "kind": "pipe"
+        },
+        {
+          "id": "right",
+          "label": "右",
+          "position": [
+            1.0,
+            0.5
+          ],
+          "angle": 0,
+          "kind": "pipe"
+        }
+      ]
+    },
+    {
+      "key": "pipe.line-v",
+      "name": "垂直管道",
+      "category": "pipe",
+      "defaultWidth": 24,
+      "defaultHeight": 240,
+      "palette": {
+        "body": "#64748b"
+      },
+      "parts": [
+        {
+          "id": "pipe",
+          "shape": "rect",
+          "frame": {
+            "x": 0.35,
+            "y": 0,
+            "width": 0.3,
+            "height": 1
+          },
+          "fill": "body"
+        }
+      ],
+      "ports": [
+        {
+          "id": "top",
+          "label": "上",
+          "position": [
+            0.5,
+            0.0
+          ],
+          "angle": 270,
+          "kind": "pipe"
+        },
+        {
+          "id": "bottom",
+          "label": "下",
+          "position": [
+            0.5,
+            1.0
+          ],
+          "angle": 90,
+          "kind": "pipe"
+        }
+      ]
+    },
+    {
+      "key": "machine.motor",
+      "name": "电机",
+      "category": "machine",
+      "defaultWidth": 160,
+      "defaultHeight": 100,
+      "palette": {
+        "body": "#1e293b",
+        "border": "#64748b",
+        "accent": "#a3e635",
+        "text": "#e2e8f0"
+      },
+      "props": [
+        {
+          "key": "caption",
+          "label": "标签",
+          "kind": "text",
+          "default": "M",
+          "group": "内容"
+        }
+      ],
+      "bindingSlots": [
+        {
+          "key": "run",
+          "label": "运行状态色",
+          "style": "stateColor"
+        }
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0.08,
+            "y": 0.2,
+            "width": 0.74,
+            "height": 0.6
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 2,
+          "cornerRadius": 8
+        },
+        {
+          "id": "shaft",
+          "shape": "rect",
+          "frame": {
+            "x": 0.82,
+            "y": 0.44,
+            "width": 0.16,
+            "height": 0.12
+          },
+          "fill": "border"
+        },
+        {
+          "id": "lamp",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0.16,
+            "y": 0.36,
+            "width": 0.16,
+            "height": 0.26
+          },
+          "fill": "accent",
+          "bindingSlot": "run"
+        },
+        {
+          "id": "caption",
+          "shape": "text",
+          "frame": {
+            "x": 0.4,
+            "y": 0.32,
+            "width": 0.36,
+            "height": 0.36
+          },
+          "fill": "text",
+          "textProp": "caption",
+          "fontSize": 16,
+          "bold": true
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "display.alarm",
+      "name": "报警条",
+      "category": "instrument",
+      "defaultWidth": 260,
+      "defaultHeight": 56,
+      "palette": {
+        "body": "#7f1d1d",
+        "border": "#f87171",
+        "text": "#fee2e2"
+      },
+      "bindingSlots": [
+        {
+          "key": "message",
+          "label": "报警文本变量",
+          "style": "textMap"
+        },
+        {
+          "key": "active",
+          "label": "报警可见",
+          "style": "visibility"
+        }
+      ],
+      "parts": [
+        {
+          "id": "bg",
+          "shape": "roundRect",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "body",
+          "stroke": "border",
+          "strokeWidth": 1,
+          "cornerRadius": 6,
+          "bindingSlot": "active"
+        },
+        {
+          "id": "text",
+          "shape": "text",
+          "frame": {
+            "x": 0.03,
+            "y": 0,
+            "width": 0.94,
+            "height": 1
+          },
+          "fill": "text",
+          "textSlot": "message",
+          "fontSize": 15,
+          "bold": true,
+          "bindingSlot": "active"
+        }
+      ],
+      "ports": []
+    }
+  ]
+}
