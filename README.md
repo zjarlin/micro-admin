@@ -174,6 +174,14 @@ SERVER_PORT=5181 DB_FILE=/root/DockerCompose/micro-admin/data/ui.db node server/
 
 schema 字段、HTTP 契约、包依赖方式与已知边界见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
 
+别的项目依赖这三个包时，仓库内直接跑源码 TS；对外发布先出产物：
+
+```bash
+pnpm build:packages     # packages/{data-page,ui-server} → dist/*.{js,d.ts}
+# data-page-element 是 .vue 壳，发源码，由消费方 Vite 编译
+```
+
+
 ## 已实现的后台能力
 
 - 登录/退出、会话恢复、Token 注入、登录后重定向。
