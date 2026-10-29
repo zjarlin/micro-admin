@@ -40,6 +40,15 @@ const engine = createPageEngine({
 const result = engine.handle({ method, path, query, body })
 ```
 
+## 发布到别的项目
+
+```bash
+pnpm build          # tsc -p tsconfig.build.json → dist/*.js + dist/*.d.ts
+npm publish         # publishConfig.exports 让消费方解析到 dist，仓库内仍直接跑 src
+```
+
+（`node_modules` 里的 `.ts` 不被 Node 22 接受，所以对外必须先编译。）
+
 ## 契约要点
 
 - schema 只能是 JSON：无函数、无 class、无 VNode，因此后端能原样下发。

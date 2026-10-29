@@ -34,6 +34,17 @@ const { app } = createApp({
 serve({ fetch: app.fetch, hostname: config.SERVER_HOST, port: config.SERVER_PORT })
 ```
 
+## 发布到别的项目
+
+仓库内 Node 22 直接执行 `src/*.ts`，不需要构建；发布到 npm 或别的仓库时必须先出产物，
+否则 Node 会拒绝对 `node_modules` 里的 TS 做类型剥离：
+
+```bash
+pnpm --filter @addzero/data-page build     # 产出 dist/*.js + dist/*.d.ts
+pnpm --filter @addzero/ui-server build
+npm publish                                # exports 由 publishConfig 自动切到 dist
+```
+
 ## 表结构
 
 | 表 | 内容 |

@@ -216,7 +216,14 @@ const { app } = createApp({
 serve({ fetch: app.fetch, port: 5181 })
 ```
 
-包内相对导入一律带 `.ts` 后缀：Node 22 直接执行 TS 依赖这一点（换 tsc/tsup 出包时也兼容）。
+包内相对导入一律带 `.ts` 后缀（`allowImportingTsExtensions` + `rewriteRelativeImportExtensions`）：
+本仓库里 Node 22 直接执行 TS，不需要预构建；**发布给别的项目时**必须带编译产物，
+因为 Node 不解包 `node_modules` 里的 TS（`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`）。
+两个后端包已配好 `tsconfig.build.json`（`declaration` + 相对导入改写成 `.js`）与
+`publishConfig.exports`：`pnpm --filter @addzero/data-page build` 出 `dist/*.{js,d.ts}`，
+`npm publish` 时 `exports` 自动切到 `dist`，仓库内仍走 `src`，因此「本地跑 TS、发布给 JS」两不冲突。
+`@addzero/data-page-element` 是 `.vue` 壳，交给消费方的构建器（Vite）编译，直接发源码。
+
 要换存储（Postgres/MySQL），实现 `PageStore` / `SchemaStateStore` / `KeyValueStore` 三个端口即可，
 引擎与页面层一行不改。
 

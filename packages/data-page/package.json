@@ -4,7 +4,11 @@
   "description": "配置驱动的通用页面层：schema 契约、CRUD 引擎与页面状态机（无 UI 依赖）",
   "type": "module",
   "sideEffects": false,
-  "files": ["src", "README.md"],
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
@@ -25,6 +29,67 @@
     "vue": "^3.5.0"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./schema": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.js"
+      },
+      "./engine": {
+        "types": "./dist/engine.d.ts",
+        "default": "./dist/engine.js"
+      },
+      "./transport": {
+        "types": "./dist/transport.d.ts",
+        "default": "./dist/transport.js"
+      },
+      "./rules": {
+        "types": "./dist/rules.d.ts",
+        "default": "./dist/rules.js"
+      },
+      "./validate": {
+        "types": "./dist/validate.d.ts",
+        "default": "./dist/validate.js"
+      },
+      "./tree": {
+        "types": "./dist/tree.d.ts",
+        "default": "./dist/tree.js"
+      },
+      "./schema-client": {
+        "types": "./dist/schema-client.d.ts",
+        "default": "./dist/schema-client.js"
+      },
+      "./use-page": {
+        "types": "./dist/usePage.d.ts",
+        "default": "./dist/usePage.js"
+      },
+      "./use-tree": {
+        "types": "./dist/useTree.d.ts",
+        "default": "./dist/useTree.js"
+      },
+      "./use-form-dialog": {
+        "types": "./dist/useFormDialog.d.ts",
+        "default": "./dist/useFormDialog.js"
+      },
+      "./use-actions": {
+        "types": "./dist/useActions.d.ts",
+        "default": "./dist/useActions.js"
+      },
+      "./use-references": {
+        "types": "./dist/useReferences.d.ts",
+        "default": "./dist/useReferences.js"
+      },
+      "./format": {
+        "types": "./dist/format.d.ts",
+        "default": "./dist/format.js"
+      }
+    }
   }
 }

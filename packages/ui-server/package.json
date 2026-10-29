@@ -4,7 +4,11 @@
   "description": "通用页面的 TS 后端：Hono + zod + node:sqlite，schema 存储、CRUD 与配置热更新",
   "type": "module",
   "sideEffects": false,
-  "files": ["src", "README.md"],
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./sqlite-store": "./src/sqlite-store.ts",
@@ -18,6 +22,27 @@
     "zod": "^4.6.7"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./sqlite-store": {
+        "types": "./dist/sqlite-store.d.ts",
+        "default": "./dist/sqlite-store.js"
+      },
+      "./config": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.js"
+      },
+      "./app": {
+        "types": "./dist/app.d.ts",
+        "default": "./dist/app.js"
+      }
+    }
   }
 }

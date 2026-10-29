@@ -6,7 +6,8 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vue-tsc -b && vite build",
+    "build": "pnpm build:packages && vue-tsc -b && vite build",
+    "build:packages": "pnpm --filter @addzero/data-page build && pnpm --filter @addzero/ui-server build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "vue-tsc -b",
     "test": "vitest run",
