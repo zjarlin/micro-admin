@@ -45,8 +45,10 @@ export interface SysUser {
   nickname: string
   phone: string
   email: string
-  department: string
-  role: string
+  /** 所属部门 id：名称由 `/system/departments` 解析，不冗余存储。 */
+  deptId: number | null
+  /** 角色 id：名称由 `/system/roles` 解析。 */
+  roleId: number | null
   status: UserStatus
   createdAt: string
 }
@@ -59,17 +61,6 @@ export interface Role {
   status: UserStatus
   userCount: number
   createdAt: string
-}
-
-export interface MenuNode {
-  id: number
-  title: string
-  path: string
-  type: 'directory' | 'menu' | 'button'
-  permission: string
-  status: UserStatus
-  order: number
-  children?: MenuNode[]
 }
 
 export interface Department {

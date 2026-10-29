@@ -2,6 +2,8 @@
 
 一个 Vue 3 + Vite + TypeScript 的微内核后台管理系统。内核只负责插件发现、依赖排序、启停、路由/菜单/服务/命令/槽位编排与资源回收；登录、工作台、系统管理、系统监控都以插件形式接入，业务能力对标若依常用后台模块。
 
+后台页面是**配置驱动**的：一份 schema 描述查询、列、表单、行操作与左树，前端不需要为每个页面写 `.vue`，后端用同一个引擎提供列表与增删改查。仓库内自带一个 TypeScript 后端（Hono + 文件存储），`node server/main.ts` 即可独立运行。详见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
+
 演示账号：
 
 | 账号 | 密码 | 说明 |
@@ -9,7 +11,7 @@
 | `admin` | `admin123` | 超级管理员，拥有 `*:*:*` 权限 |
 | `auditor` | `audit123` | 只读审计账号，只能看到授权菜单 |
 
-> 演示数据保存在浏览器 `localStorage`，不会请求真实后端。清除站点数据即可恢复种子数据。
+> 默认 `VITE_API_MODE=mock`：演示数据保存在浏览器 `localStorage`，不请求网络。清除站点数据即可恢复种子数据；切到 `http` 模式则走仓库内的真实后端。
 
 ## 快速开始
 
@@ -106,7 +108,14 @@ src/
     monitor/           # 系统监控模块
   layouts/             # 管理后台壳
   router/              # 内核启动、路由编译、登录/权限守卫
-  shared/              # HTTP、Mock、CRUD、格式化
+  shared/
+    data/              # 与 UI 无关的页面契约、通用引擎、状态机、页面注册表
+    runtime/           # 登录/工作台/监控等固定接口（前后端共用）
+    scada/             # 组态画布契约与演示后端
+  components/
+    data/              # Element Plus 页面壳：表、弹窗、表单、左树
+    scada/             # 组态画布组件
+server/                # Hono 后端：HTTP 外壳 + 文件存储
   stores/              # Pinia：会话、内核状态、UI
   styles/              # 设计变量与后台样式
 tests/
@@ -114,14 +123,25 @@ tests/
   *.test.ts            # 内核、权限、HTTP、Mock 单元测试
 ```
 
-## 真实后端接入
+## 后端
 
-复制 `.env.example` 为 `.env.local`，按后端情况设置：
+仓库内自带一个可直接运行的后端（Node 22 原生执行 TS，无需构建）：
+
+```bash
+node server/main.ts                                  # 默认 127.0.0.1:5181
+SERVER_PORT=5181 DATA_DIR=/root/DockerCompose/micro-admin/data node server/main.ts
+```
+
+- 技术栈：Hono（HTTP 外壳）+ zod（配置校验）+ Node 原生 TS；持久化是 JSON 文件，换数据库只需实现 `PageStore` / `RuntimeStore` 两个接口。
+- 资源接口与浏览器 mock 共用同一个 `createPageEngine()`，鉴权/工作台/监控共用 `createRuntimeApi()`，不存在两套实现。
+- `GET /api/health` 供健康检查；其余接口在 `/api/*` 下，除登录外未带有效令牌一律 401。
+
+前端切到真实后端（dev）：
 
 ```dotenv
 VITE_API_MODE=http
 VITE_API_BASE_URL=/api
-API_PROXY_TARGET=http://127.0.0.1:8080
+API_PROXY_TARGET=http://127.0.0.1:5181
 ```
 
 - `VITE_API_MODE=mock` 使用内置演示数据；`http` 使用真实后端。
@@ -129,21 +149,21 @@ API_PROXY_TARGET=http://127.0.0.1:8080
 - Vite 开发代理把 `/api` 原样转发到 `API_PROXY_TARGET`，不会自动去掉 `/api` 前缀。
 - 请求统一走 `src/shared/http.ts`，响应约定为 `{ code: 0, message: string, data: T }`，非 0 或非 2xx 会抛出 `ApiError`。
 
-内置接口覆盖：
+## 通用页面
 
-- `/auth/login`、`/auth/profile`、`/auth/logout`
-- `/system/users`、`/system/roles`、`/system/menus`、`/system/departments`
-- `/system/posts`、`/system/dicts`、`/system/configs`、`/system/notices`
-- `/monitor/online`、`/monitor/jobs`、`/monitor/server`、`/monitor/cache`
-- `/dashboard/overview`
+新增一个后台页面 = 在 `src/shared/data/pages/registry.ts` 登记一份 schema（后端已下发时连这一步都省掉），
+页面组件只剩 `<SchemaPage page-key="system.post" :can="session.can" />`。
+左树右表加 `mode="tree"`；特殊单元格用插槽逃生。
+
+schema 字段、HTTP 契约、移植方式与已知边界见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
 
 ## 已实现的后台能力
 
 - 登录/退出、会话恢复、Token 注入、登录后重定向。
 - 动态菜单、菜单搜索、侧栏折叠、暗色主题、面包屑。
-- 用户 CRUD、搜索、分页、状态切换、内置管理员保护。
-- 角色、菜单树、部门树、岗位、字典、参数、通知公告管理。
-- 在线用户、定时任务、服务监控、缓存监控。
+- 用户、角色、菜单、部门、岗位、字典、参数、公告、定时任务全部由 schema 驱动：
+  查询、分页、左树筛选（含下级）、表单校验、唯一性、删除保护、跨资源取值都在同一层实现。
+- 在线用户、服务监控、缓存监控；组态画布工作台。
 - 插件中心：依赖拓扑、启停、运行期错误面板、服务与命令清单。
 - 工作台：指标卡、趋势图、部门分布、公告、最近操作、插件槽位注入的健康卡片。
 
