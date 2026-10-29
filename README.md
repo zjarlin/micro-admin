@@ -18,7 +18,37 @@ pnpm install
 pnpm dev
 ```
 
-默认地址为 `http://127.0.0.1:5174`。常用校验：
+默认地址为 `http://127.0.0.1:5174`。
+
+### 生命周期脚本（推荐，可从任意目录调用）
+
+```bash
+scripts/setup.sh     # pnpm install --frozen-lockfile
+scripts/start.sh     # 幂等启动 vite dev；已运行只校验不重启
+scripts/logs.sh      # 只读查看 PID/端口/健康码/最近日志
+scripts/restart.sh   # 先停稳再起；旧进程未退出即失败
+scripts/stop.sh      # 只停本项目的、经身份核验的进程；未运行返回 0
+scripts/build.sh     # pnpm build，产物 dist/
+scripts/verify.sh    # pnpm verify = typecheck + test + build
+```
+
+运行期文件全部收敛在项目内 `.run/`（已在 `.gitignore`）：
+
+| 文件 | 用途 |
+| --- | --- |
+| `.run/micro-admin.pid` | 当前实例 PID（由子 shell `exec` 前写入，与实际进程恒等） |
+| `.run/micro-admin.state` | pid/pgid/sid/starttime/port/mode，用于身份与端口复核 |
+| `.run/micro-admin.lock` | 生命周期操作串行锁（`flock`，默认等 30s） |
+| `.run/logs/dev.log` | dev/preview 服务器输出（超过 20MB 自动轮转为 `.1`） |
+| `.run/logs/{build,verify,setup}.log` | 对应脚本的输出 |
+
+端口取 `DEV_PORT`（`.env.local` > `.env` > 5174），也可用 `MICRO_ADMIN_PORT` 覆盖；
+`MICRO_ADMIN_SERVE_MODE=preview` 可改跑 `vite preview`（需先 `scripts/build.sh`）。
+
+安全约定：`stop` 只处理 PID 文件记录且 `cwd` 为本项目、命令行含 vite/node/pnpm、启动时间与记录一致
+的进程；校验不通过时拒绝动手并返回非 0。仅当该 PID 是自建会话首进程时才按进程组回收。
+
+常用校验：
 
 ```bash
 pnpm typecheck
