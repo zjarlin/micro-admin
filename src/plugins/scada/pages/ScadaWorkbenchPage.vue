@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 组态工作台：画面列表 + 图元库 + 画布 + 属性面板。
 //
-// 数据全部走后端契约（/scada/*），mock 模式下由 src/shared/scada/mock-store.ts 顶替；
+// 数据全部走后端契约（/scada/*，实现在 `server/plugins/scada/`）；
 // 画布求值与几何在 src/shared/scada/render.ts，页面只做交互编排。
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

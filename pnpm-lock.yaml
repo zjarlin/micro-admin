@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@addzero/data-page':
+        specifier: workspace:*
+        version: link:packages/data-page
+      '@addzero/data-page-element':
+        specifier: workspace:*
+        version: link:packages/data-page-element
+      '@addzero/ui-server':
+        specifier: workspace:*
+        version: link:packages/ui-server
       '@element-plus/icons-vue':
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.44(typescript@5.9.3))
@@ -66,6 +75,42 @@ importers:
       vue-tsc:
         specifier: ^3.3.13
         version: 3.3.13(typescript@5.9.3)
+
+  packages/data-page:
+    dependencies:
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.44(typescript@5.9.3)
+
+  packages/data-page-element:
+    dependencies:
+      '@addzero/data-page':
+        specifier: workspace:*
+        version: link:../data-page
+      '@element-plus/icons-vue':
+        specifier: ^2.3.0
+        version: 2.3.2(vue@3.5.44(typescript@5.9.3))
+      element-plus:
+        specifier: ^2.14.0
+        version: 2.14.7(vue@3.5.44(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.44(typescript@5.9.3)
+
+  packages/ui-server:
+    dependencies:
+      '@addzero/data-page':
+        specifier: workspace:*
+        version: link:../data-page
+      '@hono/node-server':
+        specifier: ^1.19.17
+        version: 1.19.17(hono@4.13.14)
+      hono:
+        specifier: ^4.13.14
+        version: 4.13.14
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
 packages:
 

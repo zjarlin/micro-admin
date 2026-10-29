@@ -7,7 +7,9 @@
 // 为空时会被 `skip_serializing_if` 省略，`keepAspect` / `version` 缺省不写。
 // 后端反序列化靠 `serde(default)` 补齐，前端没有这层，必须在加载处补同样的默认值，
 // 否则 `symbol.bindingSlots.find(...)` 会抛错并让整块画布渲染不出来。
-import library from '@/assets/scada/builtin-symbols.json'
+//
+// 导入方式：JSON 在浏览器由 Vite 解析，在 Node 由 `node server` 用 `readFile` 读取，
+// 因此这里只做「解析 + 补默认值」，数据本身从调用方传进来，前后端共用同一份逻辑。
 import type {
   ScadaBindingSlotSpec,
   ScadaPropSpec,
@@ -16,18 +18,13 @@ import type {
   ScadaSymbolPort,
 } from './types'
 
-interface SymbolLibraryFile {
+export interface SymbolLibraryFile {
   version: number
   symbols: Partial<ScadaSymbolDefinition>[]
 }
 
-const file = library as unknown as SymbolLibraryFile
-
-/** 图元库版本，与 `symbols.json` 的 `version` 一致。 */
-export const SCADA_SYMBOL_VERSION = file.version
-
 /** 按 crate `SymbolDefinition` 的 serde 默认值把稀疏字段补齐。 */
-function normalize(raw: Partial<ScadaSymbolDefinition>): ScadaSymbolDefinition {
+export function normalizeSymbol(raw: Partial<ScadaSymbolDefinition>): ScadaSymbolDefinition {
   return {
     key: String(raw.key ?? ''),
     name: String(raw.name ?? ''),
@@ -45,9 +42,9 @@ function normalize(raw: Partial<ScadaSymbolDefinition>): ScadaSymbolDefinition {
   }
 }
 
-/** 全部内置图元；每次返回独立副本，避免编辑期改动污染全局定义。 */
-export function builtinSymbols(): ScadaSymbolDefinition[] {
-  return file.symbols.map((symbol) => structuredClone(normalize(symbol)))
+/** 从图元库文件解析出全部内置图元；每次返回独立副本。 */
+export function symbolsOfFile(file: SymbolLibraryFile): ScadaSymbolDefinition[] {
+  return file.symbols.map((symbol) => normalizeSymbol(structuredClone(symbol)))
 }
 
 /** 按 `key` 建索引，供画布求值按 `widget.symbolKey` 查定义。 */

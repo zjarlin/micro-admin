@@ -18,6 +18,9 @@
     "typecheck:server": "tsc -b server"
   },
   "dependencies": {
+    "@addzero/data-page": "workspace:*",
+    "@addzero/data-page-element": "workspace:*",
+    "@addzero/ui-server": "workspace:*",
     "@element-plus/icons-vue": "^2.3.2",
     "@hono/node-server": "^1.19.17",
     "element-plus": "^2.14.7",

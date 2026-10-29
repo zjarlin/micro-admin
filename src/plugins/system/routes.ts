@@ -1,6 +1,15 @@
 import type { MenuContribution, RouteContribution } from '@/kernel'
 
 export const routes: RouteContribution[] = [
+  {
+    // 兜底：任何 `/p/<key>` 都按后端下发的 schema 渲染。
+    // 后端新登记一个页面后，这里不需要改代码（菜单另行下发）。
+    name: 'schema-page',
+    path: '/p/:pageKey',
+    component: () => import('./pages/SchemaRoutePage.vue'),
+    title: '通用页面',
+    permission: 'system:page:view',
+  },
   { name: 'user', path: '/system/user', component: () => import('./pages/UserPage.vue'), title: '用户管理', permission: 'system:user:list' },
   { name: 'role', path: '/system/role', component: () => import('./pages/RolePage.vue'), title: '角色管理', permission: 'system:role:list' },
   { name: 'menu', path: '/system/menu', component: () => import('./pages/MenuPage.vue'), title: '菜单管理', permission: 'system:menu:list' },

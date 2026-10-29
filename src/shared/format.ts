@@ -1,20 +1,8 @@
-const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-})
-
-export function formatDateTime(value: string | number | Date): string {
-  const date = value instanceof Date ? value : new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : dateFormatter.format(date).replaceAll('/', '-')
-}
-
-export function formatPercent(value: number): string {
-  return `${Math.round(value)}%`
-}
+// 宿主展示格式化：通用部分直接复用页面层，避免出现第二套实现。
+//
+// `formatDateTime` / `formatPercent` 由 `@addzero/data-page` 提供（单元格渲染与此同源）；
+// 这里只保留后台壳自己的头像缩写等本地约定。
+export { formatDateTime, formatPercent } from '@addzero/data-page'
 
 export function initialsOf(name: string): string {
   return [...name.trim()].slice(0, 2).join('').toUpperCase() || 'U'

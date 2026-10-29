@@ -69,7 +69,7 @@ function fill(username: string, password: string): void {
           <button type="button" @click="fill('auditor', 'audit123')"><strong>auditor</strong><span>只读审计</span></button>
         </div>
       </div>
-      <p class="login-tip">演示数据保存在浏览器 localStorage，可随时清空。</p>
+      <p class="login-tip">账号与页面数据来自本机 TS 后端（SQLite），登录即读取真实接口。</p>
     </section>
   </main>
 </template>

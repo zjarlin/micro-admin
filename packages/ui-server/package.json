@@ -1,0 +1,23 @@
+{
+  "name": "@addzero/ui-server",
+  "version": "0.1.0",
+  "description": "通用页面的 TS 后端：Hono + zod + node:sqlite，schema 存储、CRUD 与配置热更新",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["src", "README.md"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./sqlite-store": "./src/sqlite-store.ts",
+    "./config": "./src/config.ts",
+    "./app": "./src/app.ts"
+  },
+  "dependencies": {
+    "@addzero/data-page": "workspace:*",
+    "@hono/node-server": "^1.19.17",
+    "hono": "^4.13.14",
+    "zod": "^4.6.7"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

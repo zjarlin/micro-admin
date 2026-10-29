@@ -9,6 +9,15 @@
     },
     {
       "path": "./server"
+    },
+    {
+      "path": "./packages/data-page"
+    },
+    {
+      "path": "./packages/data-page-element"
+    },
+    {
+      "path": "./packages/ui-server"
     }
   ]
 }

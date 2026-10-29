@@ -4,8 +4,10 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { installDataPage } from '@addzero/data-page-element'
 import { bootKernel, installPluginRoutes, router } from './router'
 import { createRuntime, RUNTIME_KEY } from './shared/service'
+import { http } from './shared/api'
 import { useUiStore } from './stores/ui'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
@@ -29,6 +31,7 @@ async function bootstrap(): Promise<void> {
     (id) => kernel.getStatus(id)?.enabled ?? false,
   ))
 
+  installDataPage(app, { transport: http })
   app.use(router)
   app.use(ElementPlus, { locale: zhCn as never })
   for (const [name, component] of Object.entries(ElementPlusIconsVue)) app.component(name, component)

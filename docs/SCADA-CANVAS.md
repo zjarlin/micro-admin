@@ -10,14 +10,17 @@
 | --- | --- | --- |
 | `src/shared/scada/types.ts` | 画面/图元/变量/接口契约 + 文档解析与归一化 | `okmy_dics/frontend/src/types/scada.ts` |
 | `src/shared/scada/render.ts` | 几何、吸附、对齐、槽位求值（纯函数，无 DOM） | `.../screens/scada/composables/scada-render.ts` |
-| `src/shared/scada/symbols.ts` | 内置图元装载 + 稀疏字段补齐 + 索引 | 新增 |
+| `src/shared/scada/symbols.ts` | 图元解析 + 稀疏字段补齐 + 索引（前后端共用） | 新增 |
+| `src/shared/scada/library.ts` | 浏览器侧图元库入口（JSON 由 Vite 解析） | 新增 |
 | `src/assets/scada/builtin-symbols.json` | 图元库唯一数据源（15 个内置图元） | `okmy_dics/creates/az-scada-canvas/builtin-symbols.json` |
 | `src/components/scada/ScadaCanvas.vue` | SVG 渲染 + 选择/拖动/缩放/旋转/框选/吸附 | `.../views/ScadaCanvas.vue` |
 | `src/components/scada/ScadaSymbolPalette.vue` | 图元库面板（分类/搜索/点击或拖入） | 同上 |
 | `src/components/scada/ScadaInspector.vue` | 属性、几何、变量绑定、阈值 | 同上 |
 | `src/components/scada/ScadaTagPicker.vue` | 通道变量选择器 | 同上 |
 | `src/plugins/scada/pages/ScadaWorkbenchPage.vue` | 工作台编排：画面列表 + 画布 + 属性面板 | 由 `ScadaScene.vue` 精简重写 |
-| `src/shared/scada/mock-store.ts` | `VITE_API_MODE=mock` 时的演示后端 | 新增 |
+| `server/plugins/scada/service.ts` | 真实后端：画面 CRUD、校验、点位目录 | 新增 |
+| `server/plugins/scada/tags.ts` | 点位目录（换成真实采集通道时只改这里） | 新增 |
+| `server/plugins/scada/index.ts` | 装配：读图元 JSON + KV 存储 | 新增 |
 
 ## 接口契约
 
@@ -35,7 +38,8 @@ POST /scada/validate                  → { valid, issues, missingTagIds, refere
 POST /scada/preview                   → { svg, issues, missingTagIds }
 ```
 
-`.env` 中 `VITE_API_MODE=http` + `VITE_API_BASE_URL` 即切真实后端；页面代码无需改动。
+后端实现在 `server/plugins/scada/`，通过 `@addzero/ui-server` 的 `extensions` 挂在 `/api` 下；
+画面数据存 SQLite 的 `ui_kv`（键 `scada:state`）。前端不需要任何开关，浏览器端只有真实后端一条链路。
 
 ## 与来源实现的差异
 

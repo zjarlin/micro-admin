@@ -11,5 +11,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['tests/**/*.test.ts'],
     restoreMocks: true,
+    // 默认 forks 池在本机启动慢且偶发超时；threads 更快也足够隔离。
+    pool: 'threads',
   },
 })

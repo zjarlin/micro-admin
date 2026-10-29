@@ -13,8 +13,6 @@ page.on('pageerror', (error) => errors.push(error.message))
 const evidence = []
 try {
   await page.goto(`${base}/login`, { waitUntil: 'networkidle' })
-  await page.evaluate(() => localStorage.clear())
-  await page.reload({ waitUntil: 'networkidle' })
   await page.getByRole('heading', { name: '登录控制台' }).waitFor()
   evidence.push({ step: 'login-page', title: await page.title() })
   await page.screenshot({ path: '/tmp/micro-admin-login.png', fullPage: true })
@@ -69,6 +67,7 @@ try {
     ['/monitor/server', '服务监控'],
     ['/monitor/cache', '缓存监控'],
     ['/profile', '个人中心'],
+    ['/p/demo.device', '设备台账'],
   ]
   for (const [path, title] of businessPages) {
     await page.goto(`${base}${path}`, { waitUntil: 'networkidle' })

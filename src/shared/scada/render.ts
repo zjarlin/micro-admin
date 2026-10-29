@@ -15,8 +15,8 @@ import type {
   ScadaSymbolPart,
   ScadaWidget,
   ScadaWidgetBinding,
-} from '@/shared/scada/types'
-import { SCADA_ROTATION_DEGREES } from '@/shared/scada/types'
+} from './types.ts'
+import { SCADA_ROTATION_DEGREES } from './types.ts'
 
 /** 通道变量当前值：与 crate `TagValueSource` 同构。 */
 export interface TagValueSource {

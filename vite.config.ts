@@ -12,9 +12,13 @@ export default defineConfig(({ mode }) => {
     server: {
       host: env.DEV_HOST || '0.0.0.0',
       port: Number(env.DEV_PORT || 5174),
-      proxy: env.API_PROXY_TARGET
-        ? { '/api': { target: env.API_PROXY_TARGET, changeOrigin: true } }
-        : {},
+      // 开发期始终把 /api 转到本地 TS 后端；未配置时按默认端口 5181。
+      proxy: {
+        '/api': {
+          target: env.API_PROXY_TARGET || 'http://127.0.0.1:5181',
+          changeOrigin: true,
+        },
+      },
     },
     build: {
       target: 'es2022',

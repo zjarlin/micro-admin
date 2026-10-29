@@ -1,0 +1,30 @@
+{
+  "name": "@addzero/data-page",
+  "version": "0.1.0",
+  "description": "配置驱动的通用页面层：schema 契约、CRUD 引擎与页面状态机（无 UI 依赖）",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["src", "README.md"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./engine": "./src/engine.ts",
+    "./transport": "./src/transport.ts",
+    "./rules": "./src/rules.ts",
+    "./validate": "./src/validate.ts",
+    "./tree": "./src/tree.ts",
+    "./schema-client": "./src/schema-client.ts",
+    "./use-page": "./src/usePage.ts",
+    "./use-tree": "./src/useTree.ts",
+    "./use-form-dialog": "./src/useFormDialog.ts",
+    "./use-actions": "./src/useActions.ts",
+    "./use-references": "./src/useReferences.ts",
+    "./format": "./src/format.ts"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

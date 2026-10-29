@@ -1,0 +1,21 @@
+{
+  "name": "@addzero/data-page-element",
+  "version": "0.1.0",
+  "description": "通用页面层的 Element Plus 适配：schema → 表格/查询栏/表单弹窗/左树",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["src", "README.md"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./SchemaPage.vue": "./src/SchemaPage.vue",
+    "./CrudPage.vue": "./src/CrudPage.vue",
+    "./TreePage.vue": "./src/TreePage.vue",
+    "./notifier": "./src/notifier.ts"
+  },
+  "peerDependencies": {
+    "@addzero/data-page": "workspace:*",
+    "element-plus": "^2.14.0",
+    "@element-plus/icons-vue": "^2.3.0",
+    "vue": "^3.5.0"
+  }
+}

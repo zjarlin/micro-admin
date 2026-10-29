@@ -1,43 +1,25 @@
-export interface ApiEnvelope<T> {
-  code: number
-  message: string
-  data: T
-}
+// 宿主业务实体类型：schema 只描述形状，具体实体仍由业务侧声明。
+//
+// 运行期形状（会话/登录日志/监控指标）由 `@addzero/data-page` 提供并在此转出，
+// 免得宿主再多一份同名类型。
+export type {
+  ApiEnvelope,
+  CacheEntry,
+  LoginLog,
+  LoginPayload,
+  LoginResult,
+  OnlineSession,
+  OperationLog,
+  ServerMetric,
+  SessionUser,
+} from '@addzero/data-page'
 
-export interface PageQuery {
-  page: number
-  pageSize: number
-  keyword?: string
-  status?: string
-}
+/** 分页查询与结果：页面层已定义，宿主直接转出，避免两份同名类型。 */
+export type { PageQuery, PageResult } from '@addzero/data-page'
 
-export interface PageResult<T> {
-  rows: T[]
-  total: number
-}
+export type { UserStatus } from './entity-status.ts'
 
-export interface SessionUser {
-  id: number
-  username: string
-  nickname: string
-  avatar: string
-  email: string
-  department: string
-  roles: string[]
-  permissions: string[]
-}
-
-export interface LoginPayload {
-  username: string
-  password: string
-}
-
-export interface LoginResult {
-  token: string
-  user: SessionUser
-}
-
-export type UserStatus = 'active' | 'disabled'
+import type { UserStatus } from './entity-status.ts'
 
 export interface SysUser {
   id: number
@@ -106,29 +88,6 @@ export interface Notice {
   status: 'draft' | 'published'
 }
 
-export interface LoginLog {
-  id: number
-  username: string
-  ip: string
-  location: string
-  browser: string
-  os: string
-  status: 'success' | 'fail'
-  message: string
-  createdAt: string
-}
-
-export interface OperationLog {
-  id: number
-  module: string
-  action: string
-  operator: string
-  method: string
-  duration: number
-  status: 'success' | 'fail'
-  createdAt: string
-}
-
 export interface Job {
   id: number
   name: string
@@ -138,31 +97,4 @@ export interface Job {
   status: 'running' | 'paused'
   lastRunAt: string
   nextRunAt: string
-}
-
-export interface ServerMetric {
-  host: string
-  os: string
-  uptime: string
-  cpu: number
-  memory: number
-  disk: number
-  load: number[]
-  updatedAt: string
-}
-
-export interface CacheEntry {
-  key: string
-  type: string
-  ttl: number
-  size: string
-}
-
-export interface OnlineSession {
-  token: string
-  username: string
-  ip: string
-  browser: string
-  loginAt: string
-  lastActiveAt: string
 }

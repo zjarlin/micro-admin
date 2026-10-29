@@ -16,5 +16,12 @@
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true
   },
-  "include": ["./**/*.ts", "../src/shared/data/**/*.ts", "../src/shared/runtime/**/*.ts", "../src/shared/types.ts"]
+  "exclude": ["../src/shared/scada/library.ts"],
+  "include": [
+    "./**/*.ts",
+    "../src/schema/**/*.ts",
+    "../src/shared/scada/**/*.ts",
+    "../src/shared/types.ts",
+    "../src/shared/entity-status.ts"
+  ]
 }
