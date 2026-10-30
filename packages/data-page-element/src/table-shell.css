@@ -1,0 +1,60 @@
+/*
+ * 表格壳层的公共像素规则（非 scoped，由 index.ts 引入一次）。
+ *
+ * 「操作列黑白残影」的成因与修法：
+ * 1) Element Plus 对 `position: sticky` 的固定列只写 `background: inherit`，
+ *    底色实际来自整行 `tr`（深色模式是 #131c2e）；
+ * 2) 同一套主题又给单元格加了 `transition: background-color .25s`
+ *    （`.el-table--enable-row-transition .el-table__body td.el-table__cell`）。
+ * 其它列的单元格底色是透明的，过渡看不出来；**固定列是唯一真正带底色的单元格**，
+ * 于是快速切换深浅色时它会在中间色停 0.25s，甚至被下一次切换打断后停在中间色，
+ * 表现为操作列一条灰黑竖带（截图里的「黑白残影」）。
+ *
+ * 因此这里做两件事：固定列自己画不透明底色（不再依赖继承），并关掉它的底色过渡
+ * （切换即时完成，永远落在目标色，不会留中间态）。下面各条同时覆盖行状态
+ * （斑马纹 / hover）与表头，保证固定列的底色始终和同行其余单元格一致。
+ */
+
+/* 固定列不需要底色动画：关掉 Element Plus 给 td 的 0.25s 过渡，
+   深浅色切换、重排时都直接落到目标色，不会停在中间色。 */
+.el-table--enable-row-transition .el-table__body td.el-table__cell.el-table-fixed-column--left,
+.el-table--enable-row-transition .el-table__body td.el-table__cell.el-table-fixed-column--right {
+    transition: none;
+}
+
+/* 固定列单元格：底色与行一致，不依赖 `background: inherit`。 */
+.el-table .el-table__body tr > .el-table__cell.el-table-fixed-column--left,
+.el-table .el-table__body tr > .el-table__cell.el-table-fixed-column--right {
+    background-color: var(--el-table-tr-bg-color, var(--el-bg-color));
+}
+
+/* 斑马纹与 hover 是行级样式，固定列要跟着走，否则会露出白底。 */
+.el-table .el-table__body tr.el-table__row--striped > .el-table__cell.el-table-fixed-column--left,
+.el-table .el-table__body tr.el-table__row--striped > .el-table__cell.el-table-fixed-column--right {
+    background-color: var(--el-fill-color-lighter);
+}
+
+.el-table .el-table__body tr:hover > .el-table__cell.el-table-fixed-column--left,
+.el-table .el-table__body tr:hover > .el-table__cell.el-table-fixed-column--right,
+.el-table .el-table__body tr.hover-row > .el-table__cell.el-table-fixed-column--left,
+.el-table .el-table__body tr.hover-row > .el-table__cell.el-table-fixed-column--right {
+    background-color: var(--el-table-row-hover-bg-color);
+}
+
+/* 表头固定列用表头底色，与 Element Plus 自己的表头规则取值一致。 */
+.el-table .el-table__header tr > .el-table__cell.el-table-fixed-column--left,
+.el-table .el-table__header tr > .el-table__cell.el-table-fixed-column--right {
+    background-color: var(--el-table-header-bg-color, var(--el-fill-color-light));
+}
+
+/* 固定操作列与可滚动内容之间要有分隔，否则看起来像文字被截断。 */
+.el-table .el-table__cell.el-table-fixed-column--right.is-first-column {
+    border-left: 1px solid var(--el-border-color-light);
+}
+
+/* 行操作永远一行显示：按钮多时靠列宽，不靠换行。 */
+.el-table .crud-actions .cell {
+    display: flex;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}

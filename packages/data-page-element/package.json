@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "description": "通用页面层的 Element Plus 适配：schema → 表格/查询栏/表单弹窗/左树",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": ["*.css"],
   "files": ["src", "README.md"],
   "exports": {
     ".": "./src/index.ts",
     "./SchemaPage.vue": "./src/SchemaPage.vue",
     "./CrudPage.vue": "./src/CrudPage.vue",
     "./TreePage.vue": "./src/TreePage.vue",
-    "./notifier": "./src/notifier.ts"
+    "./notifier": "./src/notifier.ts",
+    "./table-shell.css": "./src/table-shell.css"
   },
   "peerDependencies": {
     "@addzero/data-page": "workspace:*",

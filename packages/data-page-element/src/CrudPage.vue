@@ -222,15 +222,16 @@ function disabledOf(action: ReturnType<typeof resolveActions>[number], row: Row)
 </template>
 
 <style scoped>
-.crud-layout { display: grid; gap: 16px; align-items: start; }
+/* 关键：grid 子项默认 min-width:auto，表格的最小内容宽度会把卡片顶出内容区，
+   于是在右栏打开/中栏变窄时表格「压到」右栏上。这里统一把 min-width 归零，
+   让宽度由可用空间决定、由 el-table 自己的横向滚动承接。 */
+.crud-layout { display: grid; gap: 16px; align-items: start; min-width: 0; }
+.crud-layout > * { min-width: 0; }
 .crud-layout.has-side { grid-template-columns: 240px minmax(0, 1fr); }
+.crud-layout .panel { min-width: 0; overflow: hidden; }
 .crud-head { display: flex; align-items: center; gap: 6px; }
-/* 行操作永远一行显示：按钮多时靠列宽，不靠换行。 */
-:deep(.crud-actions .cell) { display: flex; flex-wrap: nowrap; white-space: nowrap; }
-/* 固定操作列与可滚动内容之间要有分隔，否则看起来像文字被截断。 */
-:deep(.el-table__cell.el-table-fixed-column--right.is-first-column) {
-  border-left: 1px solid var(--el-border-color-light);
-}
+/* 行操作换行、固定列底色与分隔线都在 table-shell.css 里统一定义，
+   树表（TreePage）与普通列表页共用同一份，不要在组件里再写一遍。 */
 .crud-head h1 { display: inline-flex; align-items: center; gap: 4px; }
 @media (max-width: 900px) { .crud-layout.has-side { grid-template-columns: 1fr; } }
 </style>

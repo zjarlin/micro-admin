@@ -71,6 +71,10 @@ const actions = computed(() => resolveActions(http, defaultActions(props.schema.
   rowKey: props.schema.rowKey ?? 'id',
 }))
 
+/** 操作列宽度按动作数量推算：`width="auto"` 在固定列上会被算成 0/内容宽，
+ *  快速重排时容易抖动，显式宽度与 CrudPage 保持一致。 */
+const actionsWidth = computed(() => Math.max(96, actions.value.length * 56 + 24))
+
 const canAdd = computed(() => can(props.schema.permissions?.add))
 const entity = computed(() => props.schema.entity ?? '记录')
 /** 子节点字段名必须在 schema 里声明，否则「children」会被误读成业务字段。 */
@@ -108,7 +112,13 @@ const childrenProp = computed(() => treeSchema?.childrenProp ?? 'children')
             <slot :name="name" v-bind="slotProps" />
           </template>
         </CrudColumn>
-        <el-table-column v-if="actions.length" label="操作" fixed="right" width="auto">
+        <el-table-column
+          v-if="actions.length"
+          label="操作"
+          fixed="right"
+          :width="actionsWidth"
+          class-name="crud-actions"
+        >
           <template #default="{ row }">
             <template v-for="action in actions" :key="action.schema.key">
               <el-button
@@ -140,6 +150,7 @@ const childrenProp = computed(() => treeSchema?.childrenProp ?? 'children')
 </template>
 
 <style scoped>
+.page { min-width: 0; }
 .crud-head { display: flex; align-items: center; gap: 6px; }
 .crud-head h1 { display: inline-flex; align-items: center; gap: 4px; }
 </style>
