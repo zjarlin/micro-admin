@@ -63,10 +63,10 @@ rotate_log
 printf '\n===== %s start (%s, port %s) %s =====\n' "$APP_NAME" "$SERVE_MODE" "$PORT" "$(date --iso-8601=seconds)" >>"$DEV_LOG"
 
 # 子 shell 把自己的 PID 写入 PID 文件后 exec 目标命令：PID 恒等、进程组可回收，
-# 9>&- 让子进程不继承生命周期锁。
+# 9>&- 让子进程不继承生命周期锁；8>&- 同理，防止从 restart 进来时把它的锁带给常驻进程。
 setsid bash -c 'printf "%s\n" "$$" > "$1"; shift; exec "$@"' _ "$PID_FILE" \
     "$PNPM_BIN" exec vite "${vite_args[@]}" "$PORT" --strictPort \
-    >>"$DEV_LOG" 2>&1 9>&- &
+    >>"$DEV_LOG" 2>&1 9>&- 8>&- &
 
 for _ in $(seq 1 50); do
     [[ -s "$PID_FILE" ]] && break

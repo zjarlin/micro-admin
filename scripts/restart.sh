@@ -20,7 +20,9 @@ OLD_PORT="$(state_get port || true)"
 [[ -n "$OLD_PORT" ]] || OLD_PORT="$(resolve_port)"
 
 log "== 第一步：停止（当前 PID=${OLD_PID:-无}，端口 ${OLD_PORT}）=="
-if ! bash "${SCRIPT_DIR}/stop.sh"; then
+# 8>&- ：子脚本与它拉起的常驻进程不得继承 restart 锁，
+# 否则 restart 结束后锁仍被 vite/node 持有，下一次 restart 会永久报「正在进行」。
+if ! bash "${SCRIPT_DIR}/stop.sh" 8>&-; then
     die "stop.sh 执行失败，已中止 restart（不会启动新实例）" 1
 fi
 
@@ -34,7 +36,7 @@ if port_listening "$OLD_PORT"; then
 fi
 
 log "== 第二步：启动 =="
-if ! bash "${SCRIPT_DIR}/start.sh"; then
+if ! bash "${SCRIPT_DIR}/start.sh" 8>&-; then
     die "start.sh 执行失败，restart 未完成" 1
 fi
 
