@@ -2,7 +2,16 @@
 //
 // 与 UI 无关，只依赖 SQLite 与共享的 scada 类型/图元库，
 // 因此可以整体搬到别的项目里（换存储只改 kv 注入）。
-import type { KeyValueStore } from '@zjarlin/ui-server'
+import { RawResponse, type KeyValueStore } from '@zjarlin/ui-server'
+import {
+  buildPlan,
+  renderPlanIsometric,
+  renderPlanIsometricFit,
+  writeIfc,
+  type AiExtrusionDecision,
+  type ExtrusionPlan,
+} from '../../../src/shared/scada/ifc.ts'
+import { aiStatusOf, requestExtrusionDecisions, type ExtrusionAiOptions } from './ai.ts'
 import {
   createEmptyScadaDocument,
   parseScadaDocument,
@@ -17,7 +26,7 @@ import {
   type ScadaValidateResult,
 } from '../../../src/shared/scada/types.ts'
 import { indexSymbols } from '../../../src/shared/scada/symbols.ts'
-import { buildScene, sceneToSvg } from '../../../src/shared/scada/scene.ts'
+import { buildPartScene, buildScene, sceneToSvg } from '../../../src/shared/scada/scene.ts'
 import type { TagValueSource } from '../../../src/shared/scada/render.ts'
 
 /** 画面存储形状：与对外的 `ScadaScreenDetail` 一致，但只存必要字段。 */
@@ -32,6 +41,8 @@ interface StoredScreen {
   sortIndex: number
   createdAt: number
   updatedAt: number
+  /** 3D 拉伸决策（AI/人工确认过的字段覆盖）；null 表示全部走规则表。 */
+  extrusionJson: string | null
 }
 
 interface ScadaState {
@@ -48,15 +59,18 @@ export interface ScadaServiceOptions {
   tags: ScadaTagOption[]
   /** 存储键前缀，便于同库多租户共存。 */
   namespace?: string
+  /** 缺参追问的模型配置；缺省表示 AI 未启用（只用规则表）。 */
+  ai?: ExtrusionAiOptions | null
 }
 
 export interface ScadaService {
+  /** 异步：缺参追问要等模型返回，其余分支仍然同步完成。 */
   handle(request: {
     method: string
     path: string
     query: URLSearchParams
     body: Record<string, unknown>
-  }): unknown | typeof UNHANDLED
+  }): Promise<unknown | typeof UNHANDLED>
 }
 
 export const UNHANDLED = Symbol('scada-unhandled')
@@ -133,6 +147,7 @@ function summaryOf(record: StoredScreen): ScadaScreenSummary {
     description: record.description,
     documentVersion: record.documentVersion,
     widgetCount: document.widgets.length,
+    threeD: Boolean(record.extrusionJson),
     sortIndex: record.sortIndex,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -140,7 +155,18 @@ function summaryOf(record: StoredScreen): ScadaScreenSummary {
 }
 
 function detailOf(record: StoredScreen): ScadaScreenDetail {
-  return { ...record }
+  return { ...record, extrusionJson: record.extrusionJson ?? null }
+}
+
+/** 已保存的决策：按 `<widgetId>/<partId>` 存，未知零件自动忽略。 */
+function decisionsOf(record: StoredScreen): Record<string, AiExtrusionDecision> {
+  if (!record.extrusionJson) return {}
+  try {
+    const parsed = JSON.parse(record.extrusionJson) as Record<string, AiExtrusionDecision>
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
 }
 
 /** 首屏示例：水位 + 泵 + 压力读数，打开就能看出绑定效果。 */
@@ -177,7 +203,7 @@ function seedScreens(tags: ScadaTagOption[]): StoredScreen[] {
   return [{
     id: 1, projectId: 1, name: '水处理总览', description: '原水箱液位、出水压力与泵运行状态',
     documentJson: JSON.stringify(document), documentVersion: 1, previewSvg: null,
-    sortIndex: 0, createdAt: now, updatedAt: now,
+    sortIndex: 0, createdAt: now, updatedAt: now, extrusionJson: null,
   }]
 }
 
@@ -197,7 +223,7 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
   }
 
   return {
-    handle(request): unknown | typeof UNHANDLED {
+    async handle(request): Promise<unknown | typeof UNHANDLED> {
       const { method, path, query } = request
       // GET 没有请求体：统一按空对象处理，避免扩展层各写一遍空值判断。
       const body = (typeof request.body === 'object' && request.body !== null
@@ -256,6 +282,7 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
           sortIndex: state.screens.filter((screen) => screen.projectId === projectId).length,
           createdAt: now,
           updatedAt: now,
+          extrusionJson: null,
         }
         state.screens.push(record)
         save(state)
@@ -316,7 +343,154 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
         return result
       }
 
+      // ---------------- IFC / 3D（2D→BIM） ----------------
+
+      if (path === '/scada/screen/extrusion/plan' && method === 'POST') {
+        const record = requireScreen(state, Number(body.screenId ?? 0))
+        const projection = projectionOf(body)
+        const plan = planOf(record, options, projection, decisionsOf(record))
+        return planResponse(record, plan, options)
+      }
+
+      if (path === '/scada/screen/extrusion/apply' && method === 'POST') {
+        const record = requireScreen(state, Number(body.screenId ?? 0))
+        const decisions = Array.isArray(body.decisions) ? (body.decisions as AiExtrusionDecision[]) : []
+        if (decisions.length) {
+          const merged = { ...decisionsOf(record) }
+          for (const decision of decisions) {
+            if (decision && typeof decision.key === 'string' && decision.key) merged[decision.key] = decision
+          }
+          record.extrusionJson = JSON.stringify(merged)
+          record.updatedAt = Date.now()
+          save(state)
+        }
+        const plan = planOf(record, options, projectionOf(body), decisionsOf(record))
+        return planResponse(record, plan, options)
+      }
+
+      if (path === '/scada/screen/extrusion/ai' && method === 'POST') {
+        if (!options.ai) throw errorOf('AI 未启用：缺少 SUB2API_API_KEY', 400)
+        const record = requireScreen(state, Number(body.screenId ?? 0))
+        const projection = projectionOf(body)
+        const before = planOf(record, options, projection, decisionsOf(record))
+        if (!before.aiRequest) {
+          return { ...planResponse(record, before, options), ai: { ...aiStatusOf(options.ai), called: false } }
+        }
+        const result = await requestExtrusionDecisions(before, options.ai)
+        const merged = { ...decisionsOf(record) }
+        for (const decision of result.decisions) merged[decision.key] = decision
+        record.extrusionJson = JSON.stringify(merged)
+        record.updatedAt = Date.now()
+        save(state)
+        const after = planOf(record, options, projection, decisionsOf(record))
+        return {
+          ...planResponse(record, after, options),
+          ai: { ...aiStatusOf(options.ai), called: true, mode: result.mode, model: result.model, answered: result.decisions.length },
+        }
+      }
+
+      if (path === '/scada/screens/iso' && method === 'POST') {
+        // 九宫格缩略图：一次拿整页，避免每张卡片单独发请求（浏览器 <img> 带不了 Bearer）。
+        const ids = Array.isArray(body.screenIds) ? body.screenIds.map(Number) : null
+        const projection = projectionOf(body)
+        return state.screens
+          .filter((screen) => screen.projectId === projectId && (!ids || ids.includes(screen.id)))
+          .sort((left, right) => left.sortIndex - right.sortIndex || left.id - right.id)
+          .map((screen) => {
+            const plan = planOf(screen, options, projection, decisionsOf(screen))
+            // 缩略图按内容自适应：画面常常只占画布一角，固定比例会只看得到一块空墙。
+            const iso = renderPlanIsometricFit(plan, { width: 320, height: 240 }, { background: null, labels: false })
+            return { id: screen.id, svg: iso.svg, width: iso.width, height: iso.height, threeD: Boolean(screen.extrusionJson) }
+          })
+      }
+
+      if (path === '/scada/screen/ifc' && method === 'GET') {
+        const record = requireScreen(state, Number(query.get('screenId') ?? 0))
+        const projection = query.get('projection') === 'plan' ? 'plan' : 'facade'
+        const plan = planOf(record, options, projection, decisionsOf(record))
+        const file = writeIfc(plan, {
+          name: record.name,
+          screenId: record.id,
+          projectId: record.projectId,
+          documentVersion: record.documentVersion,
+          organization: 'Micro Admin',
+          author: 'micro-admin',
+        })
+        return new RawResponse(file.content, 'application/x-step', { filename: file.filename })
+      }
+
+      if (path === '/scada/screen/iso' && method === 'GET') {
+        const record = requireScreen(state, Number(query.get('screenId') ?? 0))
+        const projection = query.get('projection') === 'plan' ? 'plan' : 'facade'
+        const scale = Math.min(Math.max(Number(query.get('scale') ?? 0.16) || 0.16, 0.02), 1)
+        const plan = planOf(record, options, projection, decisionsOf(record))
+        const iso = renderPlanIsometric(plan, { scale, background: null, labels: false })
+        return new RawResponse(iso.svg, 'image/svg+xml; charset=utf-8', { inline: true })
+      }
+
       return UNHANDLED
     },
+  }
+}
+
+function requireScreen(state: ScadaState, screenId: number): StoredScreen {
+  const record = state.screens.find((screen) => screen.id === screenId)
+  if (!record) throw errorOf('画面不存在', 404)
+  return record
+}
+
+function projectionOf(body: Record<string, unknown>): 'facade' | 'plan' {
+  return body.projection === 'plan' ? 'plan' : 'facade'
+}
+
+/** 画面 → 零件场景 → 3D 计划；导出与预览共用同一条链路。 */
+function planOf(
+  record: StoredScreen,
+  options: ScadaServiceOptions,
+  projection: 'facade' | 'plan',
+  decisions: Record<string, AiExtrusionDecision>,
+): ExtrusionPlan {
+  const document = parseScadaDocument(record.documentJson)
+  const scene = buildPartScene(document, indexSymbols(options.symbols), new Map())
+  return buildPlan(
+    { width: scene.width, height: scene.height, background: scene.background, widgets: scene.widgets },
+    {
+      screenName: record.name,
+      symbols: options.symbols,
+      settings: { projection },
+      decisions,
+    },
+  )
+}
+
+/** 计划 → 接口响应：前端只拿展示需要的字段，几何留在服务端。 */
+function planResponse(
+  record: StoredScreen,
+  plan: ExtrusionPlan,
+  options: ScadaServiceOptions,
+): Record<string, unknown> {
+  return {
+    screenId: record.id,
+    screenName: record.name,
+    projection: plan.settings.projection,
+    canvas: plan.canvas,
+    settings: plan.settings,
+    stats: plan.stats,
+    missing: plan.missing,
+    ready: plan.missing.length === 0,
+    ai: aiStatusOf(options.ai ?? null),
+    items: plan.items.map((item) => ({
+      key: `${item.widgetId}/${item.partId}`,
+      widgetId: item.widgetId,
+      widgetName: item.widgetName,
+      symbolKey: item.symbolKey,
+      partId: item.partId,
+      shape: item.shape,
+      text: item.text,
+      missing: item.missing,
+      hint: item.hint,
+      decision: item.decision,
+    })),
+    aiRequest: plan.aiRequest ? plan.aiRequest.items : null,
   }
 }

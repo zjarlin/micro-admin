@@ -55,6 +55,62 @@ export interface ScadaScene {
   widgets: ScadaSceneWidget[]
 }
 
+/**
+ * 零件场景：保留每个部件自己的形状与绝对几何。
+ *
+ * `buildScene` 把部件压成了 path/text 两种绘制图元，BIM 导出拿不到「这是圆还是矩形」，
+ * 因此这里额外暴露一层未压缩的零件树（同一份 `resolveWidget` 结果，不重复求值）。
+ * 消费方是 `@zjarlin/ifc-canvas`（拉伸/圆柱/管道判定）与 3D 预览。
+ */
+export interface ScadaPartSceneWidget {
+  id: string
+  name: string
+  symbolKey: string
+  rect: ScadaRect
+  zIndex: number
+  rotationDegrees: number
+  parts: ResolvedPart[]
+}
+
+export interface ScadaPartScene {
+  width: number
+  height: number
+  background: string
+  widgets: ScadaPartSceneWidget[]
+}
+
+export function buildPartScene(
+  document: ScadaDocument,
+  symbols: Record<string, ScadaSymbolDefinition>,
+  values: Map<number, TagValueSource>,
+): ScadaPartScene {
+  const ordered = [...document.widgets].sort(
+    (left, right) => left.zIndex - right.zIndex || left.id.localeCompare(right.id),
+  )
+  const widgets: ScadaPartSceneWidget[] = []
+  for (const widget of ordered) {
+    const symbol = symbols[widget.symbolKey]
+    if (!symbol) continue
+    const resolved = resolveWidget(widget, symbol, values)
+    if (resolved.visible === false) continue
+    widgets.push({
+      id: widget.id,
+      name: widget.name || symbol.name,
+      symbolKey: widget.symbolKey,
+      rect: roundRect(resolved.rect),
+      zIndex: widget.zIndex,
+      rotationDegrees: resolved.rotationDegrees,
+      parts: resolved.parts,
+    })
+  }
+  return {
+    width: round3(document.canvas.width),
+    height: round3(document.canvas.height),
+    background: document.canvas.background || '#0f172a',
+    widgets,
+  }
+}
+
 /** 保留三位小数：DOM 与 SVG 字符串输出同一份数值，避免两端口径漂移。 */
 function round3(value: number): number {
   if (!Number.isFinite(value)) return 0

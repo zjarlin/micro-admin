@@ -38,15 +38,28 @@ export interface Envelope<T> {
  * 因此 `.ifc`、`.svg` 这类产物不需要再额外开一个静态目录。
  */
 export class RawResponse {
+  // 不用参数属性：`node --experimental-strip-types` 只支持纯类型擦除。
+  readonly body: string | Uint8Array
+  readonly contentType: string
+  readonly options: { filename?: string | undefined; inline?: boolean | undefined; status?: number | undefined }
+
   constructor(
-    readonly body: string | Uint8Array,
-    readonly contentType: string,
-    readonly options: { filename?: string | undefined; inline?: boolean | undefined; status?: number | undefined } = {},
-  ) {}
+    body: string | Uint8Array,
+    contentType: string,
+    options: { filename?: string | undefined; inline?: boolean | undefined; status?: number | undefined } = {},
+  ) {
+    this.body = body
+    this.contentType = contentType
+    this.options = options
+  }
 }
 
 /** 宿主扩展：返回 `null` 表示不处理，交给页面引擎继续匹配。 */
 export interface ApiExtension {
+  /**
+   * 返回值直接进 `data` 信封；返回 `null` 表示不处理。
+   * 异步扩展（调模型、拉远端）返回 Promise，外壳会 await 后再判断。
+   */
   handle(request: {
     method: string
     path: string
@@ -172,7 +185,7 @@ export function createApp(deps: AppDeps): CreatedApp {
       if (handled !== ENGINE_UNHANDLED) return c.json(envelope(handled))
 
       for (const extension of extensions) {
-        const result = extension.handle({ method, path, query: url.searchParams, body })
+        const result = await extension.handle({ method, path, query: url.searchParams, body })
         if (result === null) continue
         if (result instanceof RawResponse) {
           const headers = new Headers({ 'Content-Type': result.contentType })

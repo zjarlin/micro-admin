@@ -97,6 +97,8 @@ importers:
         specifier: ^3.5.0
         version: 3.5.44(typescript@5.9.3)
 
+  packages/ifc-canvas: {}
+
   packages/ui-server:
     dependencies:
       '@zjarlin/data-page':

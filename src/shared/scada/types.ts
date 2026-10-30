@@ -188,6 +188,8 @@ export interface ScadaScreenSummary {
   description: string | null
   documentVersion: number
   widgetCount: number
+  /** 是否已经有 3D 拉伸决策（导出过 IFC 或 AI 补过参数）。 */
+  threeD?: boolean
   sortIndex: number
   createdAt: number
   updatedAt: number
@@ -202,6 +204,8 @@ export interface ScadaScreenDetail {
   documentJson: string
   documentVersion: number
   previewSvg: string | null
+  /** 3D 拉伸决策（`<widgetId>/<partId>` → 字段覆盖），null 表示全部走规则表。 */
+  extrusionJson?: string | null
   sortIndex: number
   createdAt: number
   updatedAt: number

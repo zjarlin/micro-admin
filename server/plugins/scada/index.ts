@@ -8,6 +8,7 @@ import type { KeyValueStore } from '@zjarlin/ui-server'
 import { symbolsOfFile, type SymbolLibraryFile } from '../../../src/shared/scada/symbols.ts'
 import { createScadaService, type ScadaService } from './service.ts'
 import { scadaTags } from './tags.ts'
+import { extrusionAiFromEnv } from './ai.ts'
 
 const LIBRARY_PATH = fileURLToPath(new URL('../../../src/assets/scada/builtin-symbols.json', import.meta.url))
 
@@ -16,6 +17,8 @@ export interface ScadaPluginOptions {
   /** 覆盖图元库路径（换图元包时用）。 */
   libraryPath?: string
   namespace?: string
+  /** 覆盖缺参追问的模型配置；缺省从环境变量读（无 key 时 AI 不启用）。 */
+  ai?: ReturnType<typeof extrusionAiFromEnv>
 }
 
 export function createScadaPlugin(options: ScadaPluginOptions): ScadaService {
@@ -26,6 +29,7 @@ export function createScadaPlugin(options: ScadaPluginOptions): ScadaService {
     symbols: symbolsOfFile(file),
     symbolVersion: file.version,
     tags: scadaTags(),
+    ai: options.ai ?? extrusionAiFromEnv(),
     ...(options.namespace ? { namespace: options.namespace } : {}),
   })
 }

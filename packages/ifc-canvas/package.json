@@ -1,0 +1,47 @@
+{
+  "name": "@zjarlin/ifc-canvas",
+  "version": "0.1.0",
+  "description": "组态画面 → IFC4（ISO 16739）BIM 模型：绘图指令集映射、缺参检测、SPF 序列化与轴测预览",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./symbols3d": "./src/symbols3d.ts",
+    "./writer": "./src/writer.ts",
+    "./isometric": "./src/isometric.ts",
+    "./guid": "./src/guid.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./symbols3d": {
+        "types": "./dist/symbols3d.d.ts",
+        "default": "./dist/symbols3d.js"
+      },
+      "./writer": {
+        "types": "./dist/writer.d.ts",
+        "default": "./dist/writer.js"
+      },
+      "./isometric": {
+        "types": "./dist/isometric.d.ts",
+        "default": "./dist/isometric.js"
+      },
+      "./guid": {
+        "types": "./dist/guid.d.ts",
+        "default": "./dist/guid.js"
+      }
+    }
+  }
+}
