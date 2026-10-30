@@ -2,6 +2,11 @@
   "name": "@addzero/data-page",
   "version": "0.1.0",
   "description": "配置驱动的通用页面层：schema 契约、CRUD 引擎与页面状态机（无 UI 依赖）",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zjarlin/micro-admin.git",
+    "directory": "packages/data-page"
+  },
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -33,6 +38,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",

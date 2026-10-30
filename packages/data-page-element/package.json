@@ -2,6 +2,11 @@
   "name": "@addzero/data-page-element",
   "version": "0.1.0",
   "description": "通用页面层的 Element Plus 适配：schema → 表格/查询栏/表单弹窗/左树",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zjarlin/micro-admin.git",
+    "directory": "packages/data-page-element"
+  },
   "type": "module",
   "sideEffects": ["*.css"],
   "files": ["src", "README.md"],
@@ -12,6 +17,9 @@
     "./TreePage.vue": "./src/TreePage.vue",
     "./notifier": "./src/notifier.ts",
     "./table-shell.css": "./src/table-shell.css"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "@addzero/data-page": "workspace:*",

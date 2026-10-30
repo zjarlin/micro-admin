@@ -1,0 +1,77 @@
+# 发布 @addzero/* 到 npm，走 OIDC Trusted Publishing（不使用任何长期 token、不手输 OTP）。
+#
+# 一次性前置（在你自己的终端、需要 2FA，灌机器上执行）：
+#   npx --yes npm@11 trust github @addzero/data-page \
+#     --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
+#   npx --yes npm@11 trust github @addzero/ui-server       --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
+#   npx --yes npm@11 trust github @addzero/data-page-element --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
+#   （npm 侧要求建好后 2 天内完成首次成功发布，否则信任关系过期）
+#
+# 触发：推 v* tag，或手动 workflow_dispatch（可指定 dist-tag）。
+name: Publish packages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dist_tag:
+        description: "npm dist-tag（latest / next / dev）"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-npm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # OIDC：npm/pnpm 用这份短期凭证换发布权限，不需要 NPM_TOKEN
+      id-token: write
+    env:
+      NPM_DIST_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.dist_tag || 'latest' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: pnpm build:packages
+
+      # 顺序固定：ui-server / data-page-element 的 workspace:* 依赖由 pnpm 改写为真实版本，
+      # 所以 data-page 必须先落到 registry 上。
+      - name: Publish (OIDC)
+        run: |
+          set -euo pipefail
+          publish() {
+            name="$1"; filter="$2"
+            version="$(pnpm --filter "$filter" exec node -p "require('./package.json').version")"
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "skip ${name}@${version}（registry 上已存在）"
+              return 0
+            fi
+            echo "publish ${name}@${version} -> ${NPM_DIST_TAG}"
+            pnpm --filter "$filter" publish --access public --tag "${NPM_DIST_TAG}" --no-git-checks
+          }
+          publish @addzero/data-page packages/data-page
+          publish @addzero/ui-server packages/ui-server
+          publish @addzero/data-page-element packages/data-page-element
