@@ -9,6 +9,7 @@ import { seedPages } from '../src/schema/seed.ts'
 import { createPageRegistry } from '../src/schema/registry.ts'
 import type { SchemaStateStore } from '@zjarlin/data-page'
 import { createScadaPlugin } from './plugins/scada/index.ts'
+import { createUiCanvasPlugin } from './plugins/ui-canvas/index.ts'
 
 export interface HostDeps {
   pages: PageStore
@@ -26,13 +27,16 @@ export interface HostApp extends CreatedApp {
 
 export function createApp(deps: HostDeps): HostApp {
   const scada = createScadaPlugin({ kv: deps.kv })
+  // 图纸插件必须拿到「已装配的注册表」：发布就是把编译结果 upsert 进去。
+  const registry = createPageRegistry(deps.schemas)
+  const uiCanvas = createUiCanvasPlugin({ kv: deps.kv, registry })
 
   const created = createUiApp({
     pages: deps.pages,
     runtime: deps.runtime,
-    registry: createPageRegistry(deps.schemas),
+    registry,
     seed: seedPages,
-    extensions: [scada],
+    extensions: [scada, uiCanvas],
     ...(deps.corsOrigins ? { corsOrigins: deps.corsOrigins } : {}),
     ...(deps.staticDir ? { staticDir: deps.staticDir } : {}),
   })

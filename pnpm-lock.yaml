@@ -99,6 +99,12 @@ importers:
 
   packages/ifc-canvas: {}
 
+  packages/ui-canvas:
+    dependencies:
+      '@zjarlin/data-page':
+        specifier: workspace:*
+        version: link:../data-page
+
   packages/ui-server:
     dependencies:
       '@zjarlin/data-page':

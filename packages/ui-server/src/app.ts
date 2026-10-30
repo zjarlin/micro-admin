@@ -54,11 +54,14 @@ export class RawResponse {
   }
 }
 
-/** 宿主扩展：返回 `null` 表示不处理，交给页面引擎继续匹配。 */
+/** 宿主扩展：返回 `null` 表示不处理，交给下一个扩展/页面引擎继续匹配。 */
 export interface ApiExtension {
   /**
    * 返回值直接进 `data` 信封；返回 `null` 表示不处理。
    * 异步扩展（调模型、拉远端）返回 Promise，外壳会 await 后再判断。
+   *
+   * 也允许返回 Symbol 表示不处理（各业务域自带 `UNHANDLED` 哨兵），外壳同样跳过：
+   * 否则第一个扩展的哨兵会被当成返回值，后面的扩展永远拿不到请求。
    */
   handle(request: {
     method: string
@@ -186,7 +189,8 @@ export function createApp(deps: AppDeps): CreatedApp {
 
       for (const extension of extensions) {
         const result = await extension.handle({ method, path, query: url.searchParams, body })
-        if (result === null) continue
+        // `null` 与 Symbol 哨兵都表示「这个扩展不处理」，交给下一个。
+        if (result === null || typeof result === 'symbol') continue
         if (result instanceof RawResponse) {
           const headers = new Headers({ 'Content-Type': result.contentType })
           const filename = result.options.filename

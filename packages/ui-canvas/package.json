@@ -1,0 +1,55 @@
+{
+  "name": "@zjarlin/ui-canvas",
+  "version": "0.1.0",
+  "description": "2D 图纸 → 可运行页面：语义编译器（图纸→CrudPageSchema）与 vibeelement（可实时预览、绑数据与事件的活元素）",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@zjarlin/data-page": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./roles": "./src/roles.ts",
+    "./compile": "./src/compile.ts",
+    "./layout": "./src/layout.ts",
+    "./render": "./src/render.ts",
+    "./vibe": "./src/vibe.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./roles": {
+        "types": "./dist/roles.d.ts",
+        "default": "./dist/roles.js"
+      },
+      "./compile": {
+        "types": "./dist/compile.d.ts",
+        "default": "./dist/compile.js"
+      },
+      "./layout": {
+        "types": "./dist/layout.d.ts",
+        "default": "./dist/layout.js"
+      },
+      "./render": {
+        "types": "./dist/render.d.ts",
+        "default": "./dist/render.js"
+      },
+      "./vibe": {
+        "types": "./dist/vibe.d.ts",
+        "default": "./dist/vibe.js"
+      }
+    }
+  }
+}
