@@ -206,7 +206,9 @@ export function defaultCodeOf(element: UiElement): string {
       return `{{ value }}`
     case 'field':
     case 'query':
-      return `<el-input v-model="value" placeholder="${String(props.placeholder ?? label)}" />`
+      // 用 `:model-value` + `onChange` 而不是 `v-model`：模板作用域是只读投影，
+      // v-model 会写进作用域对象（看着能输入、实际没进表单模型）；onChange 才是宿主回写通道。
+      return `<el-input :model-value="value" @update:model-value="onChange" placeholder="${String(props.placeholder ?? label)}" />`
     default:
       return `<div class="${'vibe-' + element.role}">${label}</div>`
   }

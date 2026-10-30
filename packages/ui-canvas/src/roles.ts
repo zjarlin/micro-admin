@@ -93,7 +93,7 @@ export const ROLE_SPECS: Record<UiRole, UiRoleSpec> = {
   column: {
     role: 'column', label: '列', layer: 'leaf', defaultWidth: 160, defaultHeight: 40,
     defaultText: '', props: { cell: 'text' }, editable: [...LEAF_COMMON, 'cell', 'dict', 'tagMap', 'resolveFrom', 'code'],
-    channels: ['column.value', 'column.cell'], tint: '#bbf7d0',
+    channels: ['column.value', 'click'], tint: '#bbf7d0',
     description: '列表的一列：宽度按几何推导，顺序按横坐标。',
   },
   field: {
@@ -102,13 +102,13 @@ export const ROLE_SPECS: Record<UiRole, UiRoleSpec> = {
       ...LEAF_COMMON, 'control', 'required', 'rules', 'dict', 'options', 'default',
       'disabledOnEdit', 'span', 'rows', 'treeEndpoint',
     ],
-    channels: ['field.value', 'field.change'], tint: '#fde68a',
+    channels: ['field.value', 'change'], tint: '#fde68a',
     description: '表单控件：必填同时生成星号与校验规则。',
   },
   query: {
     role: 'query', label: '查询条件', layer: 'leaf', defaultWidth: 180, defaultHeight: 32,
     defaultText: '', props: { control: 'input' }, editable: [...LEAF_COMMON, 'control', 'match', 'props', 'dict', 'options', 'param'],
-    channels: ['query.value', 'query.change'], tint: '#bae6fd',
+    channels: ['query.value', 'change'], tint: '#bae6fd',
     description: '查询控件：匹配方式决定后端条件生成。',
   },
   action: {
