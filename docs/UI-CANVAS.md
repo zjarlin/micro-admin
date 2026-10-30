@@ -64,7 +64,7 @@ createStoredRegistry → GET /ui/pages → pagesPlugin 自动挂路由+菜单
 
 - **通道表是唯一的**（`VIBE_CHANNELS`）：`table.rows`、`column.value`、`form.values`、
   `field.value`、`query.value`、`header.title`、`text.value`、`stat.value`、`detail.value`、
-  `chart.series`、`tree.nodes`（数据）；`click`、`change`、`submit`、`select`（事件）。
+  `chart.series`、`tree.nodes`（数据）；`click`、`change`、`submit`、`select`（事件，`change` 支持 `reload` 以便改完条件立刻重查）。
   角色能挂哪些通道由角色表声明，越权绑定直接报 error。
 - **模板里只看得到两样东西**：已声明的数据通道值，和 `onClick` / `onChange` 这类处理器名。
   模板拿不到 `http` / `router` / `store`，因此可以安全地下发到别人的浏览器。

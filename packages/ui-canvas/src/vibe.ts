@@ -42,7 +42,7 @@ export const VIBE_CHANNELS: Record<string, VibeChannelSpec> = {
   'chart.series': { channel: 'chart.series', kind: 'data', label: '图表序列', shape: 'unknown[]', description: '图表数据序列。' },
   'tree.nodes': { channel: 'tree.nodes', kind: 'data', label: '树节点', shape: 'Row[]', description: '左树节点数据。' },
   click: { channel: 'click', kind: 'event', label: '点击', actions: ['navigate', 'request', 'dialog', 'emit'], description: '点击元素时触发。' },
-  change: { channel: 'change', kind: 'event', label: '值改变', actions: ['request', 'emit'], description: '控件值变化时触发。' },
+  change: { channel: 'change', kind: 'event', label: '值改变', actions: ['request', 'reload', 'emit'], description: '控件值变化时触发；查询条件改完想立刻重查就用 reload。' },
   submit: { channel: 'submit', kind: 'event', label: '提交', actions: ['request', 'dialog', 'emit'], description: '表单提交时触发。' },
   select: { channel: 'select', kind: 'event', label: '选中', actions: ['reload', 'request', 'emit'], description: '树/列表选中时触发。' },
 }
