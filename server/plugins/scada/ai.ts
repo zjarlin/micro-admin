@@ -1,6 +1,6 @@
 // 缺参追问：走 sub2api 网关的 Responses API。
 //
-// 组态→BIM 的规则表（`@addzero/ifc-canvas/symbols3d`）覆盖了内置图元，
+// 组态→BIM 的规则表（`@zjarlin/ifc-canvas/symbols3d`）覆盖了内置图元，
 // 自定义图元才会缺 `depth/elevation/material`。这时把「只含缺失字段」的清单丢给模型，
 // 要一份 JSON 决策回来，再把结果写回画面。
 //

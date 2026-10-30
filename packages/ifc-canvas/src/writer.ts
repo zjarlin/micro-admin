@@ -263,7 +263,7 @@ export function writeIfc(plan: ExtrusionPlan, meta: IfcMeta): IfcFile {
   const person = spf.add('IFCPERSON', null, null, text(author), null, null, null, null, null)
   const organization = spf.add('IFCORGANIZATION', null, text(organizationName), null, null, null)
   const personOrg = spf.add('IFCPERSONANDORGANIZATION', person, organization, null)
-  const application = spf.add('IFCAPPLICATION', organization, text('0.1.0'), text('@addzero/ifc-canvas'), text('IFCCANVAS'))
+  const application = spf.add('IFCAPPLICATION', organization, text('0.1.0'), text('@zjarlin/ifc-canvas'), text('IFCCANVAS'))
   const ownerHistory = spf.add(
     'IFCOWNERHISTORY',
     personOrg,
@@ -458,7 +458,7 @@ export function writeIfc(plan: ExtrusionPlan, meta: IfcMeta): IfcFile {
     'ISO-10303-21;',
     'HEADER;',
     `FILE_DESCRIPTION((${text(`ViewDefinition [${VIEW_DEFINITION}]`)},${text(ALIGNMENT_TAG)}),'2;1');`,
-    `FILE_NAME(${text(fileName)},${text(isoStamp(stamp))},(${text(author)}),(${text(organizationName)}),'ifc-canvas 0.1.0','@addzero/ifc-canvas','');`,
+    `FILE_NAME(${text(fileName)},${text(isoStamp(stamp))},(${text(author)}),(${text(organizationName)}),'ifc-canvas 0.1.0','@zjarlin/ifc-canvas','');`,
     `FILE_SCHEMA((${text(SCHEMA)}));`,
     'ENDSEC;',
     '',
