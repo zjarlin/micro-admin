@@ -1,5 +1,5 @@
 {
-  "name": "@addzero/data-page",
+  "name": "@zjarlin/data-page",
   "version": "0.1.0",
   "description": "配置驱动的通用页面层：schema 契约、CRUD 引擎与页面状态机（无 UI 依赖）",
   "repository": {

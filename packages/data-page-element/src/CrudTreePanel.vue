@@ -4,8 +4,8 @@
 // 选中节点写入列表查询参数；根节点「全部」代表不筛选。
 import { computed } from 'vue'
 import { Search } from '@element-plus/icons-vue'
-import type { TreeSchema } from '@addzero/data-page'
-import type { TreeNode } from '@addzero/data-page'
+import type { TreeSchema } from '@zjarlin/data-page'
+import type { TreeNode } from '@zjarlin/data-page'
 
 const props = defineProps<{
   schema: TreeSchema

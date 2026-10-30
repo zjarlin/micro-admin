@@ -2,8 +2,8 @@
 // 表单控件：schema 的一个 `FieldSchema` → 具体输入控件。
 //
 // 必填星号由 el-form-item 依据 rules 自动生成，与校验规则同源，不另写标记。
-import type { FieldOption, FieldSchema } from '@addzero/data-page'
-import type { NormalizedRule } from '@addzero/data-page'
+import type { FieldOption, FieldSchema } from '@zjarlin/data-page'
+import type { NormalizedRule } from '@zjarlin/data-page'
 import HelpHint from './HelpHint.vue'
 
 defineProps<{

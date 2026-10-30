@@ -1,6 +1,6 @@
 // Element Plus 版 Notifier：共享层只声明接口，这里落到具体组件。
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { Notifier } from '@addzero/data-page'
+import type { Notifier } from '@zjarlin/data-page'
 
 export const elementNotifier: Notifier = {
   async confirm(message, title) {

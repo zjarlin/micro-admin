@@ -5,8 +5,8 @@
 // 后者很重要：schema 由后端下发时，前端未必为它准备了插槽，
 // 这时应该正常显示值，而不是留一片空白。
 import { computed, useSlots } from 'vue'
-import { formatDateTime } from '@addzero/data-page'
-import type { ColumnSchema, Row } from '@addzero/data-page'
+import { formatDateTime } from '@zjarlin/data-page'
+import type { ColumnSchema, Row } from '@zjarlin/data-page'
 
 const props = defineProps<{
   column: ColumnSchema

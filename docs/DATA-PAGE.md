@@ -37,7 +37,7 @@ schema.ts ──┤ CrudPageSchema（唯一契约）                            
 | `packages/data-page/src/runtime-*.ts` | 登录/会话/工作台/监控等固定接口与形状 | 无 |
 | `packages/data-page-element/src/*` | Element Plus 适配层：表、弹窗、表单、左树、提示 | Vue + Element Plus |
 | `packages/ui-server/src/*` | Hono 外壳 + zod 配置 + `node:sqlite` 存储 | Node + hono + zod |
-| `src/schema/*.ts` | 本仓库的页面 schema 基线（业务配置） | `@addzero/data-page` |
+| `src/schema/*.ts` | 本仓库的页面 schema 基线（业务配置） | `@zjarlin/data-page` |
 | `src/plugins/pages/*` | 把后端登记页面变成路由与菜单 | 内核 + 包 |
 | `server/*` | 宿主装配：种子、组态插件、启动 | 包 + 业务 |
 
@@ -185,15 +185,15 @@ SERVER_PORT=5181 DB_FILE=/root/DockerCompose/micro-admin/data/ui.db node server/
 
 | 包 | 依赖 | 用途 |
 | --- | --- | --- |
-| `@addzero/data-page` | `vue`（peer） | 契约、引擎、状态机、运行期接口 |
-| `@addzero/data-page-element` | 上面 + `element-plus` | 表格/表单/左树壳 |
-| `@addzero/ui-server` | 上面 + `hono` + `zod` | HTTP 外壳 + SQLite 存储 |
+| `@zjarlin/data-page` | `vue`（peer） | 契约、引擎、状态机、运行期接口 |
+| `@zjarlin/data-page-element` | 上面 + `element-plus` | 表格/表单/左树壳 |
+| `@zjarlin/ui-server` | 上面 + `hono` + `zod` | HTTP 外壳 + SQLite 存储 |
 
 接入三步：
 
 ```jsonc
 // 1. 别的项目的 package.json
-{ "dependencies": { "@addzero/data-page": "workspace:*" } }
+{ "dependencies": { "@zjarlin/data-page": "workspace:*" } }
 ```
 
 ```ts
@@ -220,9 +220,9 @@ serve({ fetch: app.fetch, port: 5181 })
 本仓库里 Node 22 直接执行 TS，不需要预构建；**发布给别的项目时**必须带编译产物，
 因为 Node 不解包 `node_modules` 里的 TS（`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`）。
 两个后端包已配好 `tsconfig.build.json`（`declaration` + 相对导入改写成 `.js`）与
-`publishConfig.exports`：`pnpm --filter @addzero/data-page build` 出 `dist/*.{js,d.ts}`，
+`publishConfig.exports`：`pnpm --filter @zjarlin/data-page build` 出 `dist/*.{js,d.ts}`，
 `npm publish` 时 `exports` 自动切到 `dist`，仓库内仍走 `src`，因此「本地跑 TS、发布给 JS」两不冲突。
-`@addzero/data-page-element` 是 `.vue` 壳，交给消费方的构建器（Vite）编译，直接发源码。
+`@zjarlin/data-page-element` 是 `.vue` 壳，交给消费方的构建器（Vite）编译，直接发源码。
 
 要换存储（Postgres/MySQL），实现 `PageStore` / `SchemaStateStore` / `KeyValueStore` 三个端口即可，
 引擎与页面层一行不改。

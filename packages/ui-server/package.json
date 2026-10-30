@@ -1,5 +1,5 @@
 {
-  "name": "@addzero/ui-server",
+  "name": "@zjarlin/ui-server",
   "version": "0.1.0",
   "description": "通用页面的 TS 后端：Hono + zod + node:sqlite，schema 存储、CRUD 与配置热更新",
   "repository": {
@@ -21,7 +21,7 @@
     "./app": "./src/app.ts"
   },
   "dependencies": {
-    "@addzero/data-page": "workspace:*",
+    "@zjarlin/data-page": "workspace:*",
     "@hono/node-server": "^1.19.17",
     "hono": "^4.13.14",
     "zod": "^4.6.7"

@@ -2,7 +2,7 @@
 //
 // 与 UI 无关，只依赖 SQLite 与共享的 scada 类型/图元库，
 // 因此可以整体搬到别的项目里（换存储只改 kv 注入）。
-import type { KeyValueStore } from '@addzero/ui-server'
+import type { KeyValueStore } from '@zjarlin/ui-server'
 import {
   createEmptyScadaDocument,
   parseScadaDocument,

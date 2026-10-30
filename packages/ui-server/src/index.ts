@@ -13,4 +13,4 @@ export { corsOrigins, loadConfig } from './config.ts'
 export type { ApiExtension, AppDeps, CreatedApp, Envelope } from './app.ts'
 export { createApp, envelope } from './app.ts'
 
-export type { PageRegistry, PageStore, RuntimeStore } from '@addzero/data-page'
+export type { PageRegistry, PageStore, RuntimeStore } from '@zjarlin/data-page'

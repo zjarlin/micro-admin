@@ -1,11 +1,11 @@
 // Element Plus 适配层门面：schema → 真实页面。
 //
-// 与 `@addzero/data-page` 的分工：那里只有契约与状态机，这里只做像素与交互。
+// 与 `@zjarlin/data-page` 的分工：那里只有契约与状态机，这里只做像素与交互。
 // 换成其它组件库时，重写这一层即可，业务 schema 一行不改。
 import './table-shell.css'
 import type { App } from 'vue'
-import type { DataTransport } from '@addzero/data-page'
-import { DATA_TRANSPORT_KEY } from '@addzero/data-page'
+import type { DataTransport } from '@zjarlin/data-page'
+import { DATA_TRANSPORT_KEY } from '@zjarlin/data-page'
 import { elementNotifier } from './notifier.ts'
 import SchemaPage from './SchemaPage.vue'
 import CrudPage from './CrudPage.vue'
@@ -13,7 +13,7 @@ import TreePage from './TreePage.vue'
 
 export { elementNotifier, SchemaPage, CrudPage, TreePage }
 export { resolveTransport } from './transport.ts'
-export type { Notifier } from '@addzero/data-page'
+export type { Notifier } from '@zjarlin/data-page'
 
 /**
  * 宿主一次性装配：注入传输实现，并全局注册壳组件。

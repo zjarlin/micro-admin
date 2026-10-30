@@ -3,7 +3,7 @@
 // 与「页面资源」分开：这些不是 schema 驱动的 CRUD，而是固定的几个只读/鉴权接口。
 // 实现不依赖 localStorage / navigator / fetch，存储与 UA 由调用方注入，
 // 因此浏览器 mock 与 Node 服务共用同一份逻辑。
-import type { PageEngine } from '@addzero/data-page'
+import type { PageEngine } from '@zjarlin/data-page'
 import type {
   CacheEntry,
   LoginLog,

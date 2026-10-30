@@ -8,7 +8,7 @@ import {
   createStoredRegistry,
   type PageData,
   type SchemaStateStore,
-} from '@addzero/data-page'
+} from '@zjarlin/data-page'
 import { basePages } from '@/schema/registry'
 import { seedPages } from '@/schema/seed'
 

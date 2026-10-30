@@ -10,7 +10,7 @@ import {
   type CrudPageSchema,
   type PageRegistry,
   type SchemaStateStore,
-} from '@addzero/data-page'
+} from '@zjarlin/data-page'
 import { userPage } from './user.ts'
 import { rolePage } from './role.ts'
 import { deptPage } from './dept.ts'

@@ -3,7 +3,7 @@
 // 这个页面只存在于后端配置里：`menu` 让宿主自动注册路由与侧栏菜单，
 // `endpoint` 让通用引擎接管增删改查，`columns` / `fields` / `query` 决定界面。
 // 想验证「原型图画好 → 代码即可上线」，就看这一份 schema。
-import type { CrudPageSchema } from '@addzero/data-page'
+import type { CrudPageSchema } from '@zjarlin/data-page'
 
 export const devicePage: CrudPageSchema = {
   key: 'demo.device',

@@ -4,9 +4,9 @@
 // 这是「原型图画好、代码即可上线」的落点：新页面不需要新建 .vue，
 // 在服务端登记一份 schema 就出现在后台里。
 import { computed, onMounted, ref, shallowRef } from 'vue'
-import { createSchemaClient } from '@addzero/data-page'
+import { createSchemaClient } from '@zjarlin/data-page'
 import { resolveTransport } from './transport'
-import type { CrudPageSchema, DataTransport, FieldOption, Row } from '@addzero/data-page'
+import type { CrudPageSchema, DataTransport, FieldOption, Row } from '@zjarlin/data-page'
 import CrudPage from './CrudPage.vue'
 import TreePage from './TreePage.vue'
 

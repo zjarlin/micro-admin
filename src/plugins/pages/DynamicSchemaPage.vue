@@ -4,7 +4,7 @@
 // 这里没有任何页面专属代码，因此后端新增/修改 schema 都不需要前端发版。
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import SchemaPage from '@addzero/data-page-element/SchemaPage.vue'
+import SchemaPage from '@zjarlin/data-page-element/SchemaPage.vue'
 import { useSessionStore } from '@/stores/session'
 
 const route = useRoute()

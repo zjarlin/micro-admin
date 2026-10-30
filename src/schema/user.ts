@@ -1,5 +1,5 @@
 // 用户管理页面 schema：原来 169 行的手写页面，现在只剩这份声明。
-import type { CrudPageSchema } from '@addzero/data-page'
+import type { CrudPageSchema } from '@zjarlin/data-page'
 
 export const userPage: CrudPageSchema = {
   key: 'system.user',

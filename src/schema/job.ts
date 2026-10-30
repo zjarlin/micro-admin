@@ -1,4 +1,4 @@
-import type { CrudPageSchema } from '@addzero/data-page'
+import type { CrudPageSchema } from '@zjarlin/data-page'
 
 // 定时任务：只读列表 + 声明式启停。
 //

@@ -1,4 +1,4 @@
-# @addzero/data-page
+# @zjarlin/data-page
 
 配置驱动的通用页面层：一份 JSON schema 描述整页的查询、列、表单、行操作与左树，
 引擎据此提供列表/分页/筛选/校验/唯一性/增删改查。
@@ -9,14 +9,14 @@
 ## 安装
 
 ```bash
-pnpm add @addzero/data-page
+pnpm add @zjarlin/data-page
 # peer：vue ^3.5
 ```
 
 ## 前端用法
 
 ```ts
-import { installDataPage } from '@addzero/data-page-element' // 组件库适配层
+import { installDataPage } from '@zjarlin/data-page-element' // 组件库适配层
 installDataPage(app, { transport: http })                    // 一次注入
 
 // 之后任意页面：
@@ -28,7 +28,7 @@ installDataPage(app, { transport: http })                    // 一次注入
 ## 后端用法
 
 ```ts
-import { createPageEngine, createStoredRegistry } from '@addzero/data-page'
+import { createPageEngine, createStoredRegistry } from '@zjarlin/data-page'
 
 const engine = createPageEngine({
   registry: createStoredRegistry({ base: pages, baseVersion: 1, store: schemaStore }),

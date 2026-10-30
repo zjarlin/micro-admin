@@ -6,7 +6,7 @@
 //
 // 失败策略：拉不到清单只降级（保留手写页面），不让整个后台起不来。
 import type { PluginDefinition } from '@/kernel'
-import type { CrudPageSchema } from '@addzero/data-page'
+import type { CrudPageSchema } from '@zjarlin/data-page'
 
 interface PageSchemaPayload {
   key: string

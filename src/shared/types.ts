@@ -1,6 +1,6 @@
 // 宿主业务实体类型：schema 只描述形状，具体实体仍由业务侧声明。
 //
-// 运行期形状（会话/登录日志/监控指标）由 `@addzero/data-page` 提供并在此转出，
+// 运行期形状（会话/登录日志/监控指标）由 `@zjarlin/data-page` 提供并在此转出，
 // 免得宿主再多一份同名类型。
 export type {
   ApiEnvelope,
@@ -12,10 +12,10 @@ export type {
   OperationLog,
   ServerMetric,
   SessionUser,
-} from '@addzero/data-page'
+} from '@zjarlin/data-page'
 
 /** 分页查询与结果：页面层已定义，宿主直接转出，避免两份同名类型。 */
-export type { PageQuery, PageResult } from '@addzero/data-page'
+export type { PageQuery, PageResult } from '@zjarlin/data-page'
 
 export type { UserStatus } from './entity-status.ts'
 

@@ -4,7 +4,7 @@
 // 因此同一份服务代码也能被别的项目直接复用。
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { KeyValueStore } from '@addzero/ui-server'
+import type { KeyValueStore } from '@zjarlin/ui-server'
 import { symbolsOfFile, type SymbolLibraryFile } from '../../../src/shared/scada/symbols.ts'
 import { createScadaService, type ScadaService } from './service.ts'
 import { scadaTags } from './tags.ts'

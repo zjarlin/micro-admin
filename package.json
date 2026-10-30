@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "pnpm build:packages && vue-tsc -b && vite build",
-    "build:packages": "pnpm --filter @addzero/data-page build && pnpm --filter @addzero/ui-server build",
+    "build:packages": "pnpm --filter @zjarlin/data-page build && pnpm --filter @zjarlin/ui-server build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "vue-tsc -b",
     "test": "vitest run",
@@ -19,9 +19,9 @@
     "typecheck:server": "tsc -b server"
   },
   "dependencies": {
-    "@addzero/data-page": "workspace:*",
-    "@addzero/data-page-element": "workspace:*",
-    "@addzero/ui-server": "workspace:*",
+    "@zjarlin/data-page": "workspace:*",
+    "@zjarlin/data-page-element": "workspace:*",
+    "@zjarlin/ui-server": "workspace:*",
     "@element-plus/icons-vue": "^2.3.2",
     "@hono/node-server": "^1.19.17",
     "element-plus": "^2.14.7",

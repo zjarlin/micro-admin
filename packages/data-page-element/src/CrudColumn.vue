@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 列渲染：把 schema 的一列翻成 el-table-column，单元格语义交给 CellValue。
-import type { ColumnSchema, Row } from '@addzero/data-page'
+import type { ColumnSchema, Row } from '@zjarlin/data-page'
 import CellValue from './CellValue.vue'
 import HelpHint from './HelpHint.vue'
 

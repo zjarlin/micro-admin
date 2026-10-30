@@ -2,7 +2,7 @@
 //
 // 放在这里而不是服务端入口，是因为它同时被测试与种子工具复用；
 // 一旦落到存储里，后续读写都只走 `PageStore`，不会再有第二份数据源。
-import type { PageData, Row } from '@addzero/data-page'
+import type { PageData, Row } from '@zjarlin/data-page'
 
 /** 相对今天的固定时刻，避免种子数据每次运行都漂移。 */
 function iso(offsetDays: number, hour = 9, minute = 20): string {

@@ -1,13 +1,13 @@
 // 宿主装配：把「通用页面后端」与「本仓库业务（种子 / 组态）」接在一起。
 //
-// 框架能力（Hono 路由、鉴权、错误信封、schema 存储、CRUD）全在 `@addzero/ui-server`；
+// 框架能力（Hono 路由、鉴权、错误信封、schema 存储、CRUD）全在 `@zjarlin/ui-server`；
 // 这里只做三件事：给种子、挂业务扩展、读配置。
-import { createApp as createUiApp, type CreatedApp } from '@addzero/ui-server'
-import type { PageData, RuntimeStore, PageStore } from '@addzero/data-page'
-import type { KeyValueStore } from '@addzero/ui-server'
+import { createApp as createUiApp, type CreatedApp } from '@zjarlin/ui-server'
+import type { PageData, RuntimeStore, PageStore } from '@zjarlin/data-page'
+import type { KeyValueStore } from '@zjarlin/ui-server'
 import { seedPages } from '../src/schema/seed.ts'
 import { createPageRegistry } from '../src/schema/registry.ts'
-import type { SchemaStateStore } from '@addzero/data-page'
+import type { SchemaStateStore } from '@zjarlin/data-page'
 import { createScadaPlugin } from './plugins/scada/index.ts'
 
 export interface HostDeps {

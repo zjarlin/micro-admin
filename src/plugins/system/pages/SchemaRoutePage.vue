@@ -5,7 +5,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import SchemaPage from '@addzero/data-page-element/SchemaPage.vue'
+import SchemaPage from '@zjarlin/data-page-element/SchemaPage.vue'
 
 const route = useRoute()
 const session = useSessionStore()

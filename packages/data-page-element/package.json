@@ -1,5 +1,5 @@
 {
-  "name": "@addzero/data-page-element",
+  "name": "@zjarlin/data-page-element",
   "version": "0.1.0",
   "description": "通用页面层的 Element Plus 适配：schema → 表格/查询栏/表单弹窗/左树",
   "repository": {
@@ -22,7 +22,7 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@addzero/data-page": "workspace:*",
+    "@zjarlin/data-page": "workspace:*",
     "element-plus": "^2.14.0",
     "@element-plus/icons-vue": "^2.3.0",
     "vue": "^3.5.0"

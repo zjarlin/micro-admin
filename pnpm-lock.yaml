@@ -8,13 +8,13 @@ importers:
 
   .:
     dependencies:
-      '@addzero/data-page':
+      '@zjarlin/data-page':
         specifier: workspace:*
         version: link:packages/data-page
-      '@addzero/data-page-element':
+      '@zjarlin/data-page-element':
         specifier: workspace:*
         version: link:packages/data-page-element
-      '@addzero/ui-server':
+      '@zjarlin/ui-server':
         specifier: workspace:*
         version: link:packages/ui-server
       '@element-plus/icons-vue':
@@ -84,7 +84,7 @@ importers:
 
   packages/data-page-element:
     dependencies:
-      '@addzero/data-page':
+      '@zjarlin/data-page':
         specifier: workspace:*
         version: link:../data-page
       '@element-plus/icons-vue':
@@ -99,7 +99,7 @@ importers:
 
   packages/ui-server:
     dependencies:
-      '@addzero/data-page':
+      '@zjarlin/data-page':
         specifier: workspace:*
         version: link:../data-page
       '@hono/node-server':

@@ -1,4 +1,4 @@
-import type { CrudPageSchema } from '@addzero/data-page'
+import type { CrudPageSchema } from '@zjarlin/data-page'
 
 export const rolePage: CrudPageSchema = {
   key: 'system.role',

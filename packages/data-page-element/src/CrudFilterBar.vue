@@ -3,8 +3,8 @@
 //
 // 解释性文字不进正文；条件说明统一走字段的 `help`（问号浮层）。
 import { Search } from '@element-plus/icons-vue'
-import type { QuerySchema } from '@addzero/data-page'
-import type { FieldOption } from '@addzero/data-page'
+import type { QuerySchema } from '@zjarlin/data-page'
+import type { FieldOption } from '@zjarlin/data-page'
 
 defineProps<{
   query: QuerySchema[]

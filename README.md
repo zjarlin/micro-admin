@@ -4,8 +4,8 @@
 
 后台页面是**配置驱动**的：一份 schema 描述查询、列、表单、行操作与左树，前端不需要为每个页面写 `.vue`，后端用同一个引擎提供列表与增删改查。仓库自带 TypeScript 后端（Hono + `node:sqlite`），`node server/main.ts` 即可独立运行。
 
-通用页面层已抽成三个可被别的项目直接依赖的工作区包：`@addzero/data-page`（契约/引擎/状态机）、
-`@addzero/data-page-element`（Element Plus 壳）、`@addzero/ui-server`（HTTP + SQLite）。详见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
+通用页面层已抽成三个可被别的项目直接依赖的工作区包：`@zjarlin/data-page`（契约/引擎/状态机）、
+`@zjarlin/data-page-element`（Element Plus 壳）、`@zjarlin/ui-server`（HTTP + SQLite）。详见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
 
 演示账号：
 

@@ -22,13 +22,27 @@ import {
   type PageRegistry,
   type PageStore,
   type RuntimeStore,
-} from '@addzero/data-page'
+} from '@zjarlin/data-page'
 
 /** 与前端响应信封对齐：HTTP 状态之外再给业务码。 */
 export interface Envelope<T> {
   code: number
   message: string
   data: T
+}
+
+/**
+ * 原样返回的响应体：文件下载与图片类接口不能套 JSON 信封。
+ *
+ * 扩展返回 `RawResponse` 时，HTTP 外壳直接用它的字节与头部回包，
+ * 因此 `.ifc`、`.svg` 这类产物不需要再额外开一个静态目录。
+ */
+export class RawResponse {
+  constructor(
+    readonly body: string | Uint8Array,
+    readonly contentType: string,
+    readonly options: { filename?: string | undefined; inline?: boolean | undefined; status?: number | undefined } = {},
+  ) {}
 }
 
 /** 宿主扩展：返回 `null` 表示不处理，交给页面引擎继续匹配。 */
@@ -159,7 +173,21 @@ export function createApp(deps: AppDeps): CreatedApp {
 
       for (const extension of extensions) {
         const result = extension.handle({ method, path, query: url.searchParams, body })
-        if (result !== null) return c.json(envelope(result))
+        if (result === null) continue
+        if (result instanceof RawResponse) {
+          const headers = new Headers({ 'Content-Type': result.contentType })
+          const filename = result.options.filename
+          if (filename) {
+            const encoded = encodeURIComponent(filename)
+            const disposition = result.options.inline ? 'inline' : 'attachment'
+            headers.set(
+              'Content-Disposition',
+              `${disposition}; filename="${encoded}"; filename*=UTF-8''${encoded}`,
+            )
+          }
+          return new Response(result.body, { status: result.options.status ?? 200, headers })
+        }
+        return c.json(envelope(result))
       }
     } catch (error) {
       const { status, message } = failure(error)

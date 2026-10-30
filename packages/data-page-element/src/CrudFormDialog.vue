@@ -5,9 +5,9 @@
 // 保存失败留在弹窗并显示服务端文案，不静默关闭。
 import { computed, ref, watch } from 'vue'
 import type { FormInstance } from 'element-plus'
-import type { CrudPageSchema, FieldOption, FieldSchema } from '@addzero/data-page'
-import { rulesOf, type NormalizedRule } from '@addzero/data-page'
-import type { FormDialogState } from '@addzero/data-page'
+import type { CrudPageSchema, FieldOption, FieldSchema } from '@zjarlin/data-page'
+import { rulesOf, type NormalizedRule } from '@zjarlin/data-page'
+import type { FormDialogState } from '@zjarlin/data-page'
 import CrudFormField from './CrudFormField.vue'
 
 const props = defineProps<{

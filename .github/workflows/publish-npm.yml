@@ -1,10 +1,10 @@
-# 发布 @addzero/* 到 npm，走 OIDC Trusted Publishing（不使用任何长期 token、不手输 OTP）。
+# 发布 @zjarlin/* 到 npm，走 OIDC Trusted Publishing（不使用任何长期 token、不手输 OTP）。
 #
 # 一次性前置（在你自己的终端、需要 2FA，灌机器上执行）：
-#   npx --yes npm@11 trust github @addzero/data-page \
+#   npx --yes npm@11 trust github @zjarlin/data-page \
 #     --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
-#   npx --yes npm@11 trust github @addzero/ui-server       --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
-#   npx --yes npm@11 trust github @addzero/data-page-element --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
+#   npx --yes npm@11 trust github @zjarlin/ui-server       --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
+#   npx --yes npm@11 trust github @zjarlin/data-page-element --file publish-npm.yml --repo zjarlin/micro-admin --allow-publish -y
 #   （npm 侧要求建好后 2 天内完成首次成功发布，否则信任关系过期）
 #
 # 触发：推 v* tag，或手动 workflow_dispatch（可指定 dist-tag）。
@@ -72,6 +72,6 @@ jobs:
             echo "publish ${name}@${version} -> ${NPM_DIST_TAG}"
             pnpm --filter "$filter" publish --access public --tag "${NPM_DIST_TAG}" --no-git-checks
           }
-          publish @addzero/data-page packages/data-page
-          publish @addzero/ui-server packages/ui-server
-          publish @addzero/data-page-element packages/data-page-element
+          publish @zjarlin/data-page packages/data-page
+          publish @zjarlin/ui-server packages/ui-server
+          publish @zjarlin/data-page-element packages/data-page-element

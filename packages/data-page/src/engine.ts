@@ -2,7 +2,7 @@
 //
 // 与运行时无关：不 import Vue、不 import node 内置模块、不碰 DOM。
 // 因此同一份实现有三种用法：
-// 1. Node 服务（`@addzero/ui-server`，存储用 SQLite）；
+// 1. Node 服务（`@zjarlin/ui-server`，存储用 SQLite）；
 // 2. 别的宿主（Postgres/MySQL/内存，只要实现 `PageStore`）；
 // 3. 单测里直接调用（没有 HTTP 层）。
 import type { CrudPageSchema, QuerySchema, Row } from './schema.ts'

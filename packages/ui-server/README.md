@@ -1,20 +1,20 @@
-# @addzero/ui-server
+# @zjarlin/ui-server
 
 通用页面的 TypeScript 后端：Hono HTTP 外壳 + zod 配置 + `node:sqlite` 存储。
-与 `@addzero/data-page` 共用同一份引擎，因此前端、后端、测试只有一套语义。
+与 `@zjarlin/data-page` 共用同一份引擎，因此前端、后端、测试只有一套语义。
 
 ## 安装
 
 ```bash
-pnpm add @addzero/ui-server
+pnpm add @zjarlin/ui-server
 ```
 
 ## 最小启动
 
 ```ts
 import { serve } from '@hono/node-server'
-import { createSqliteStores, createApp, loadConfig, corsOrigins } from '@addzero/ui-server'
-import { createStoredRegistry } from '@addzero/data-page'
+import { createSqliteStores, createApp, loadConfig, corsOrigins } from '@zjarlin/ui-server'
+import { createStoredRegistry } from '@zjarlin/data-page'
 import { myPages, mySeed } from './pages.ts'
 
 const config = loadConfig()                    // 环境变量，默认值只在包里
@@ -40,8 +40,8 @@ serve({ fetch: app.fetch, hostname: config.SERVER_HOST, port: config.SERVER_PORT
 否则 Node 会拒绝对 `node_modules` 里的 TS 做类型剥离：
 
 ```bash
-pnpm --filter @addzero/data-page build     # 产出 dist/*.js + dist/*.d.ts
-pnpm --filter @addzero/ui-server build
+pnpm --filter @zjarlin/data-page build     # 产出 dist/*.js + dist/*.d.ts
+pnpm --filter @zjarlin/ui-server build
 npm publish                                # exports 由 publishConfig 自动切到 dist
 ```
 

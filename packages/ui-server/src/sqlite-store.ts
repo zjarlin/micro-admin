@@ -17,7 +17,7 @@ import type {
   PageStore,
   SchemaStateStore,
   StoredSchemaState,
-} from '@addzero/data-page'
+} from '@zjarlin/data-page'
 
 /** 通用键值端口：宿主往 SQLite 里放任意单例数据。 */
 export interface KeyValueStore {

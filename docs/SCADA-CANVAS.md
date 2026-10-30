@@ -53,7 +53,7 @@ POST /scada/validate                  → { valid, issues, missingTagIds, refere
 POST /scada/preview                   → { svg, issues, missingTagIds }（svg 是真实渲染结果）
 ```
 
-后端实现在 `server/plugins/scada/`，通过 `@addzero/ui-server` 的 `extensions` 挂在 `/api` 下；
+后端实现在 `server/plugins/scada/`，通过 `@zjarlin/ui-server` 的 `extensions` 挂在 `/api` 下；
 画面数据存 SQLite 的 `ui_kv`（键 `scada:state`）。前端不需要任何开关，浏览器端只有真实后端一条链路。
 
 `/scada/preview` 与保存时的 `previewSvg` 都由服务端用 `buildScene` + `sceneToSvg` 生成，

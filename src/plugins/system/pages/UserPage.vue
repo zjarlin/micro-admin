@@ -3,7 +3,7 @@
 //
 // 左树右表由 schema.tree 声明，不需要在这里写树。
 import { useSessionStore } from '@/stores/session'
-import SchemaPage from '@addzero/data-page-element/SchemaPage.vue'
+import SchemaPage from '@zjarlin/data-page-element/SchemaPage.vue'
 
 const session = useSessionStore()
 </script>

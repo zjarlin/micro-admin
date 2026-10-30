@@ -2,7 +2,7 @@
 //
 // 启动方式：`node server/main.ts`（Node 22 原生执行 TS，无需构建步骤）。
 import { serve } from '@hono/node-server'
-import { corsOrigins, createSqliteStores, loadConfig } from '@addzero/ui-server'
+import { corsOrigins, createSqliteStores, loadConfig } from '@zjarlin/ui-server'
 import { createApp } from './app.ts'
 
 const config = loadConfig()
