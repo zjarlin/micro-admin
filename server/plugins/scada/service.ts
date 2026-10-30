@@ -17,6 +17,8 @@ import {
   type ScadaValidateResult,
 } from '../../../src/shared/scada/types.ts'
 import { indexSymbols } from '../../../src/shared/scada/symbols.ts'
+import { buildScene, sceneToSvg } from '../../../src/shared/scada/scene.ts'
+import type { TagValueSource } from '../../../src/shared/scada/render.ts'
 
 /** 画面存储形状：与对外的 `ScadaScreenDetail` 一致，但只存必要字段。 */
 interface StoredScreen {
@@ -99,6 +101,27 @@ export function validateScadaDocument(
     referencedTagIds: [...new Set(document.widgets.flatMap((widget) => widget.bindings.map((binding) => binding.tagId)))],
     widgetCount: document.widgets.length,
   }
+}
+
+function previewOf(documentJson: string, options: ScadaServiceOptions): string {
+  const document = parseScadaDocument(documentJson)
+  return renderSvg(document, options.symbols, new Map(), Boolean(document.canvas.showGrid))
+}
+
+/**
+ * 画面 → SVG 字符串。
+ *
+ * 与前端 `ScadaSurface` 消费同一个 `buildScene`，所以「预览接口返回的样子」
+ * 和编辑器里看到的一致；不再是空字符串。
+ */
+function renderSvg(
+  document: ReturnType<typeof parseScadaDocument>,
+  symbols: ScadaSymbolDefinition[],
+  values: Map<number, TagValueSource>,
+  showGrid: boolean,
+): string {
+  const scene = buildScene(document, indexSymbols(symbols), values)
+  return sceneToSvg({ ...scene, showGrid })
 }
 
 function summaryOf(record: StoredScreen): ScadaScreenSummary {
@@ -229,7 +252,7 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
           description: typeof body.description === 'string' ? body.description : null,
           documentJson,
           documentVersion: 1,
-          previewSvg: null,
+          previewSvg: previewOf(documentJson, options),
           sortIndex: state.screens.filter((screen) => screen.projectId === projectId).length,
           createdAt: now,
           updatedAt: now,
@@ -250,7 +273,8 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
         }
         if (typeof body.name === 'string' && body.name.trim()) record.name = body.name.trim()
         if (body.description === null || typeof body.description === 'string') record.description = body.description
-        if (typeof body.previewSvg === 'string') record.previewSvg = body.previewSvg
+        // 缩略图由服务端生成：客户端传什么都不再是唯一来源，避免「预览图与文档不一致」。
+        record.previewSvg = previewOf(record.documentJson, options)
         if (typeof body.documentVersion === 'number') record.documentVersion = body.documentVersion
         if (typeof body.sortIndex === 'number') record.sortIndex = body.sortIndex
         record.updatedAt = Date.now()
@@ -273,9 +297,19 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
       if (path === '/scada/preview' && method === 'POST') {
         const payload = body as unknown as ScadaPreviewRequest
         const report = validateScadaDocument(String(payload.documentJson ?? ''), options.symbols, options.tags)
+        const document = parseScadaDocument(String(payload.documentJson ?? ''))
+        const values = new Map<number, TagValueSource>()
+        for (const value of payload.values ?? []) {
+          const source: TagValueSource = {}
+          if (value.raw !== undefined) source.raw = value.raw
+          if (value.text !== undefined) source.text = value.text
+          if (value.quality !== undefined) source.quality = value.quality
+          values.set(value.tagId, source)
+        }
+        const showGrid = typeof payload.showGrid === 'boolean' ? payload.showGrid : Boolean(document.canvas.showGrid)
         const result: ScadaPreviewResult = {
-          // 服务端没有渲染器：SVG 由画布自身序列化，这里只回报校验结果。
-          svg: '',
+          // 服务端与编辑器共用 shared/scada/scene 的求值结果，只是这里序列化成字符串。
+          svg: renderSvg(document, options.symbols, values, showGrid),
           issues: report.issues,
           missingTagIds: report.missingTagIds,
         }

@@ -1,6 +1,6 @@
-<!-- 组态画布：SVG 渲染 + 选择/拖动/缩放/旋转/框选/对齐吸附。
-     求值语义来自 shared/scada/render.ts（与 Rust crate az-scada-canvas 对齐），
-     这里只负责交互与绘制，不直接调用后端。 -->
+<!-- 组态画布：选择/拖动/缩放/旋转/框选/对齐吸附。
+     绘制本身交给 ScadaSurface（同一份场景图，只读端也用它），
+     这里只叠加交互：命中层、选中框、手柄、参考线、框选。 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import type { ScadaDocument, ScadaRect, ScadaSymbolDefinition, ScadaWidget } from '@/shared/scada/types'
@@ -10,10 +10,9 @@ import {
   nextRotation,
   normalizeRect,
   rectIntersects,
-  resolveWidget,
-  type ResolvedPart,
   type TagValueSource,
 } from '@/shared/scada/render'
+import ScadaSurface from './ScadaSurface.vue'
 
 const props = defineProps<{
   document: ScadaDocument
@@ -32,139 +31,20 @@ const emit = defineEmits<{
   (event: 'zoom', zoom: number): void
 }>()
 
-const svgRef = ref<SVGSVGElement | null>(null)
+/** 渲染面只暴露 svg 根节点，坐标换算要用它的实际包围盒。 */
+const surface = ref<{ svgRef: SVGSVGElement | null } | null>(null)
+
 const marquee = ref<ScadaRect | null>(null)
 const guideLines = ref<{ axis: 'vertical' | 'horizontal'; position: number }[]>([])
 
 const gridSize = computed(() => (props.document.canvas.grid > 0 ? props.document.canvas.grid : 0))
 
-/** 按 zIndex 绘制顺序求值，保证叠放顺序与后端一致。 */
-const resolvedWidgets = computed(() => {
-  const ordered = [...props.document.widgets].sort(
-    (left, right) => left.zIndex - right.zIndex || left.id.localeCompare(right.id),
-  )
-  return ordered
-    .map((widget) => {
-      const symbol = props.symbols[widget.symbolKey]
-      if (!symbol) return null
-      return { widget, resolved: resolveWidget(widget, symbol, props.values) }
-    })
-    .filter((item): item is { widget: ScadaWidget; resolved: ReturnType<typeof resolveWidget> } => Boolean(item))
-})
-
 const selectedSet = computed(() => new Set(props.selectedIds))
-
-// ---------------- 形状 → SVG path ----------------
-
-function roundRectPath(rect: ScadaRect, radius: number): string {
-  const r = Math.max(0, Math.min(radius, Math.min(rect.width, rect.height) / 2))
-  const { x, y, width, height } = rect
-  if (r <= 0) {
-    return `M ${x} ${y} H ${x + width} V ${y + height} H ${x} Z`
-  }
-  return [
-    `M ${x + r} ${y}`,
-    `H ${x + width - r}`,
-    `A ${r} ${r} 0 0 1 ${x + width} ${y + r}`,
-    `V ${y + height - r}`,
-    `A ${r} ${r} 0 0 1 ${x + width - r} ${y + height}`,
-    `H ${x + r}`,
-    `A ${r} ${r} 0 0 1 ${x} ${y + height - r}`,
-    `V ${y + r}`,
-    `A ${r} ${r} 0 0 1 ${x + r} ${y}`,
-    'Z',
-  ].join(' ')
-}
-
-function ellipsePath(rect: ScadaRect): string {
-  const rx = Math.max(rect.width / 2, 0)
-  const ry = Math.max(rect.height / 2, 0)
-  const cx = rect.x + rx
-  const cy = rect.y + ry
-  return `M ${cx - rx} ${cy} a ${rx} ${ry} 0 1 0 ${rx * 2} 0 a ${rx} ${ry} 0 1 0 ${-rx * 2} 0 Z`
-}
-
-function pointsPath(points: Array<[number, number]>, close: boolean): string {
-  if (!points.length) return ''
-  const commands = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x} ${y}`)
-  return `${commands.join(' ')}${close ? ' Z' : ''}`
-}
-
-/** 填充条：从底部按比例向上填充。 */
-function fillBarPath(rect: ScadaRect, ratio: number, radius: number): string {
-  const clamped = Math.min(Math.max(ratio, 0), 1)
-  const height = Math.max(rect.height, 0) * clamped
-  const filled: ScadaRect = {
-    x: rect.x,
-    y: rect.y + (Math.max(rect.height, 0) - height),
-    width: Math.max(rect.width, 0),
-    height,
-  }
-  return roundRectPath(filled, radius)
-}
-
-function partPath(part: ResolvedPart): string {
-  switch (part.shape) {
-    case 'rect':
-      return roundRectPath(part.rect, 0)
-    case 'roundRect':
-      return roundRectPath(part.rect, part.cornerRadius)
-    case 'ellipse':
-      return ellipsePath(part.rect)
-    case 'line':
-      return pointsPath(part.points.slice(0, 2), false)
-    case 'polyline':
-      return pointsPath(part.points, false)
-    case 'polygon':
-      return pointsPath(part.points, true)
-    case 'path':
-      return part.path ?? ''
-    case 'fillBar':
-      return fillBarPath(part.rect, part.ratio, part.cornerRadius)
-    case 'text':
-    default:
-      return ''
-  }
-}
-
-/** 指针类部件按角度旋转：绕部件中心，0 度指向 12 点方向。 */
-function partTransform(part: ResolvedPart): string | undefined {
-  if (!part.angle) return undefined
-  const cx = part.rect.x + part.rect.width / 2
-  const cy = part.rect.y + part.rect.height / 2
-  return `rotate(${part.angle} ${cx} ${cy})`
-}
-
-function partFill(part: ResolvedPart): string {
-  if (part.shape === 'polyline' || part.shape === 'line') return 'none'
-  if (part.shape === 'path') return part.fill || 'none'
-  return part.fill
-}
-
-function borderWidth(part: ResolvedPart): number {
-  return part.shape === 'line' || part.shape === 'polyline' ? Math.max(part.strokeWidth, 1) : part.strokeWidth
-}
-
-function partStroke(part: ResolvedPart): string | null {
-  if (part.shape === 'line' || part.shape === 'polyline') {
-    return part.stroke ?? part.fill ?? '#94a3b8'
-  }
-  if (!part.stroke) return null
-  return part.strokeWidth > 0 ? part.stroke : null
-}
-
-function textAnchorX(part: ResolvedPart): number {
-  return part.rect.x + part.rect.width / 2
-}
-
-function textAnchorY(part: ResolvedPart): number {
-  return part.rect.y + part.rect.height / 2 + part.fontSize * 0.35
-}
 
 // ---------------- 坐标换算 ----------------
 
 function toCanvasPoint(event: PointerEvent | MouseEvent) {
-  const svg = svgRef.value
+  const svg = surface.value?.svgRef
   if (!svg) return { x: 0, y: 0 }
   const box = svg.getBoundingClientRect()
   return {
@@ -214,9 +94,11 @@ function onHandlePointerDown(event: PointerEvent, handle: string) {
   beginDrag(event, 'resize', handle)
 }
 
-function onWidgetPointerDown(event: PointerEvent, widget: ScadaWidget) {
+function onWidgetPointerDown(event: PointerEvent, widgetId: string) {
   event.stopPropagation()
   if (props.readonly) return
+  const widget = findWidget(widgetId)
+  if (!widget) return
   const additive = event.shiftKey || event.metaKey || event.ctrlKey
   let nextSelection = props.selectedIds
   if (additive) {
@@ -546,167 +428,102 @@ const singleSelection = computed(() => {
 
 <template>
   <div class="scada-canvas" @wheel="onWheel">
-    <svg
-      ref="svgRef"
+    <ScadaSurface
+      ref="surface"
       class="scada-canvas__svg"
-      :width="document.canvas.width * zoom"
-      :height="document.canvas.height * zoom"
-      :viewBox="`0 0 ${document.canvas.width} ${document.canvas.height}`"
-      :style="{ cursor: readonly ? 'default' : 'default' }"
+      :document="document"
+      :symbols="symbols"
+      :values="values"
+      :zoom="zoom"
       tabindex="0"
       @pointerdown="onCanvasPointerDown"
       @keydown="onKeydown"
     >
-      <rect
-        :x="0"
-        :y="0"
-        :width="document.canvas.width"
-        :height="document.canvas.height"
-        :fill="document.canvas.background || '#0f172a'"
-      />
-      <template v-if="document.canvas.showGrid && gridSize > 0">
-        <defs>
-          <pattern
-            id="scada-grid-pattern"
-            :width="gridSize"
-            :height="gridSize"
-            patternUnits="userSpaceOnUse"
-          >
-            <path
-              :d="`M ${gridSize} 0 L 0 0 0 ${gridSize}`"
-              fill="none"
-              stroke="rgba(148,163,184,0.18)"
-              stroke-width="0.6"
-            />
-          </pattern>
-        </defs>
+      <!-- 每个图元组内：命中层 + 选中框 -->
+      <template #widget="{ widget }">
         <rect
-          :x="0"
-          :y="0"
-          :width="document.canvas.width"
-          :height="document.canvas.height"
-          fill="url(#scada-grid-pattern)"
-        />
-      </template>
-
-      <g
-        v-for="item in resolvedWidgets"
-        :key="item.widget.id"
-        :data-widget-id="item.widget.id"
-        :transform="
-          item.resolved.rotationDegrees
-            ? `rotate(${item.resolved.rotationDegrees} ${item.resolved.rect.x + item.resolved.rect.width / 2} ${item.resolved.rect.y + item.resolved.rect.height / 2})`
-            : undefined
-        "
-        :style="{ cursor: readonly || item.widget.locked ? 'default' : 'move' }"
-        @pointerdown="onWidgetPointerDown($event, item.widget)"
-      >
-        <!-- 命中层：部件自身是 pointer-events:none，需要一块透明矩形承接选择与拖动。 -->
-        <rect
-          v-if="item.resolved.parts.some((part) => part.visible)"
-          :x="item.resolved.rect.x"
-          :y="item.resolved.rect.y"
-          :width="item.resolved.rect.width"
-          :height="item.resolved.rect.height"
+          v-if="widget.primitives.length"
+          :x="widget.rect.x"
+          :y="widget.rect.y"
+          :width="widget.rect.width"
+          :height="widget.rect.height"
           fill="transparent"
-          style="pointer-events: all"
+          :style="{ pointerEvents: 'all', cursor: readonly || widget.locked ? 'default' : 'move' }"
+          @pointerdown="onWidgetPointerDown($event, widget.id)"
         />
-        <template v-for="part in item.resolved.parts" :key="`${item.widget.id}-${part.id}`">
-          <text
-            v-if="part.shape === 'text' && part.visible && part.text"
-            :x="textAnchorX(part)"
-            :y="textAnchorY(part)"
-            :fill="part.fill"
-            :font-size="Math.max(part.fontSize, 6)"
-            :font-weight="part.bold ? 700 : 400"
-            font-family="Noto Sans SC, Microsoft YaHei, sans-serif"
-            text-anchor="middle"
-            style="pointer-events: none"
-          >{{ part.text }}</text>
-          <path
-            v-else-if="part.shape !== 'text' && part.visible"
-            :d="partPath(part)"
-            :fill="partFill(part)"
-            :stroke="partStroke(part) ?? undefined"
-            :stroke-width="partStroke(part) ? borderWidth(part) : undefined"
-            :transform="partTransform(part)"
-            stroke-linejoin="round"
-            stroke-linecap="round"
-            style="pointer-events: none"
-          />
-        </template>
         <rect
-          v-if="selectedSet.has(item.widget.id)"
-          :x="item.resolved.rect.x"
-          :y="item.resolved.rect.y"
-          :width="item.resolved.rect.width"
-          :height="item.resolved.rect.height"
+          v-if="selectedSet.has(widget.id)"
+          :x="widget.rect.x"
+          :y="widget.rect.y"
+          :width="widget.rect.width"
+          :height="widget.rect.height"
           fill="none"
           stroke="#38bdf8"
           :stroke-width="1.5 / zoom"
           :stroke-dasharray="`${6 / zoom} ${4 / zoom}`"
           style="pointer-events: none"
         />
-      </g>
-
-      <template v-if="singleSelection && !readonly && !singleSelection.locked">
-        <rect
-          v-for="handle in HANDLES"
-          :key="`handle-${handle}`"
-          :x="handleRect(handle, singleSelection.rect).x"
-          :y="handleRect(handle, singleSelection.rect).y"
-          :width="handleRect(handle, singleSelection.rect).width"
-          :height="handleRect(handle, singleSelection.rect).height"
-          fill="#38bdf8"
-          stroke="#0f172a"
-          :stroke-width="1 / zoom"
-          :style="{ cursor: handleCursor(handle) }"
-          @pointerdown="onHandlePointerDown($event, handle)"
-        />
       </template>
 
-      <template v-if="!readonly">
-        <template
-          v-if="selectedSet.size > 1"
-        >
+      <!-- 画布级叠加层：手柄、多选底纹、参考线、框选 -->
+      <template #default>
+        <template v-if="singleSelection && !readonly && !singleSelection.locked">
           <rect
-            v-for="widget in document.widgets.filter((item) => selectedSet.has(item.id))"
-            :key="`multi-${widget.id}`"
-            :x="widget.rect.x"
-            :y="widget.rect.y"
-            :width="widget.rect.width"
-            :height="widget.rect.height"
-            fill="rgba(56,189,248,0.08)"
-            stroke="rgba(56,189,248,0.5)"
+            v-for="handle in HANDLES"
+            :key="`handle-${handle}`"
+            :x="handleRect(handle, singleSelection.rect).x"
+            :y="handleRect(handle, singleSelection.rect).y"
+            :width="handleRect(handle, singleSelection.rect).width"
+            :height="handleRect(handle, singleSelection.rect).height"
+            fill="#38bdf8"
+            stroke="#0f172a"
+            :stroke-width="1 / zoom"
+            :style="{ cursor: handleCursor(handle) }"
+            @pointerdown="onHandlePointerDown($event, handle)"
+          />
+        </template>
+
+        <template v-if="!readonly">
+          <template v-if="selectedSet.size > 1">
+            <rect
+              v-for="widget in document.widgets.filter((item) => selectedSet.has(item.id))"
+              :key="`multi-${widget.id}`"
+              :x="widget.rect.x"
+              :y="widget.rect.y"
+              :width="widget.rect.width"
+              :height="widget.rect.height"
+              fill="rgba(56,189,248,0.08)"
+              stroke="rgba(56,189,248,0.5)"
+              :stroke-width="1 / zoom"
+              style="pointer-events: none"
+            />
+          </template>
+          <line
+            v-for="guide in guideLines"
+            :key="`guideline-${guide.axis}-${guide.position}`"
+            :x1="guide.axis === 'vertical' ? guide.position : 0"
+            :y1="guide.axis === 'vertical' ? 0 : guide.position"
+            :x2="guide.axis === 'vertical' ? guide.position : document.canvas.width"
+            :y2="guide.axis === 'vertical' ? document.canvas.height : guide.position"
+            stroke="#f472b6"
+            :stroke-width="1 / zoom"
+            stroke-dasharray="4 4"
+            style="pointer-events: none"
+          />
+          <rect
+            v-if="marquee"
+            :x="marquee.x"
+            :y="marquee.y"
+            :width="marquee.width"
+            :height="marquee.height"
+            fill="rgba(56,189,248,0.12)"
+            stroke="#38bdf8"
             :stroke-width="1 / zoom"
             style="pointer-events: none"
           />
         </template>
-        <line
-          v-for="guide in guideLines"
-          :key="`guideline-${guide.axis}-${guide.position}`"
-          :x1="guide.axis === 'vertical' ? guide.position : 0"
-          :y1="guide.axis === 'vertical' ? 0 : guide.position"
-          :x2="guide.axis === 'vertical' ? guide.position : document.canvas.width"
-          :y2="guide.axis === 'vertical' ? document.canvas.height : guide.position"
-          stroke="#f472b6"
-          :stroke-width="1 / zoom"
-          stroke-dasharray="4 4"
-          style="pointer-events: none"
-        />
-        <rect
-          v-if="marquee"
-          :x="marquee.x"
-          :y="marquee.y"
-          :width="marquee.width"
-          :height="marquee.height"
-          fill="rgba(56,189,248,0.12)"
-          stroke="#38bdf8"
-          :stroke-width="1 / zoom"
-          style="pointer-events: none"
-        />
       </template>
-    </svg>
+    </ScadaSurface>
     <div class="scada-canvas__hint">
       {{ Math.round(document.canvas.width) }} × {{ Math.round(document.canvas.height) }} · {{ zoomPercent }}%
       <template v-if="!document.widgets.length"> · 从左侧图元库拖入或点击添加</template>
