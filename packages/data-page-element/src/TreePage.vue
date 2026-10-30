@@ -14,6 +14,8 @@ import { elementNotifier } from './notifier'
 import CrudColumn from './CrudColumn.vue'
 import CrudFormDialog from './CrudFormDialog.vue'
 import HelpHint from './HelpHint.vue'
+import VibeElement from './VibeElement.vue'
+import { provideVibeHost, vibeHandlers, type VibeHandler, type VibeHost } from './vibe'
 
 const props = defineProps<{
   /** `schema.tree` 必填：树表的数据来源与层级规则。 */
@@ -23,6 +25,13 @@ const props = defineProps<{
   can?: ((permission?: string) => boolean) | undefined
   notifier?: Notifier | undefined
   dictLabel?: ((type: string, value: unknown) => string | undefined) | undefined
+  /** 活元素的跳转实现（`navigate` 动作），缺省用 `location.assign`。 */
+  navigate?: ((path: string) => void) | undefined
+}>()
+
+const emit = defineEmits<{
+  /** 活元素的 `emit` 动作：宿主可挂总线或埋点。 */
+  (event: 'vibe', payload: { channel: string; payload: unknown; row: Row }): void
 }>()
 
 defineSlots<Record<string, (props: { row: Row; value: unknown }) => unknown>>()
@@ -36,6 +45,21 @@ if (!treeSchema) throw new Error(`${props.schema.key}: TreePage requires schema.
 
 const tree = useTree<Row>(http, treeSchema)
 const form = useFormDialog(http, props.schema, { onSaved: () => tree.load() })
+
+// 活元素宿主能力：树表没有「详情」按钮的默认入口，弹窗与请求动作仍可用。
+const treeHost: VibeHost = {
+  http,
+  reload: () => void tree.load(),
+  ...(props.navigate ? { navigate: props.navigate } : {}),
+  notify: (message, kind) => {
+    if (kind === 'success') notifier.success(message)
+    else if (kind === 'error') notifier.error(message)
+    else if (notifier.info) notifier.info(message)
+    else notifier.error(message)
+  },
+  dispatch: (event) => emit('vibe', event),
+}
+provideVibeHost(treeHost)
 
 const refs = useReferences(http, props.schema)
 
@@ -70,6 +94,25 @@ const actions = computed(() => resolveActions(http, defaultActions(props.schema.
   endpoint: props.schema.endpoint,
   rowKey: props.schema.rowKey ?? 'id',
 }))
+
+/** 自定义行按钮的取值：`value` / `label` / `disabled` 都能直接用。 */
+function actionDataOf(action: ReturnType<typeof resolveActions>[number], row: Row): Record<string, unknown> {
+  return {
+    value: action.schema.label,
+    label: action.schema.label,
+    row,
+    disabled: action.disabled(row),
+  }
+}
+
+/** 自定义行按钮默认「点一下等于点默认按钮」；声明了 click 动作则以动作为准。 */
+function actionHandlersOf(action: ReturnType<typeof resolveActions>[number], row: Row): Record<string, VibeHandler> {
+  return vibeHandlers(action.schema.vibe, treeHost, row, {
+    click: () => {
+      if (!action.disabled(row)) void action.run(row)
+    },
+  })
+}
 
 /** 操作列宽度按动作数量推算：`width="auto"` 在固定列上会被算成 0/内容宽，
  *  快速重排时容易抖动，显式宽度与 CrudPage 保持一致。 */
@@ -121,8 +164,14 @@ const childrenProp = computed(() => treeSchema?.childrenProp ?? 'children')
         >
           <template #default="{ row }">
             <template v-for="action in actions" :key="action.schema.key">
+              <VibeElement
+                v-if="action.visible(row) && action.schema.vibe?.code && action.schema.vibe"
+                :vibe="action.schema.vibe"
+                :data="actionDataOf(action, row)"
+                :handlers="actionHandlersOf(action, row)"
+              />
               <el-button
-                v-if="action.visible(row)"
+                v-else-if="action.visible(row)"
                 link
                 :type="action.schema.variant === 'danger' ? 'danger' : action.schema.variant === 'warning' ? 'warning' : 'primary'"
                 :disabled="action.disabled(row)"

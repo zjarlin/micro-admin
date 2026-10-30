@@ -74,11 +74,27 @@ createStoredRegistry → GET /ui/pages → pagesPlugin 自动挂路由+菜单
   改一个字即时重渲染。编译器按需 `import()`，只有真的用到 vibeelement 的页面才付这 66KB。
   编译结果被包成一个一次性组件交给 Vue 渲染——不能手工调用渲染函数，否则
   `_resolveComponent('el-button')` 解析不到全局组件，`el-*` 会退化成惰性自定义标签。
-- **运行期落地**：`modelOf(element, { data, handlers })` 是宿主侧的唯一入口；
-  数据由宿主按通道解析（取行、取表单、取接口），事件按 `action`（`navigate` / `request` /
-  `reload` / `dialog` / `emit`）注册成处理器。当前设计器预览用示例值 + 回显处理器，
-  发布后的页面仍由 `CrudPage` 壳按 schema 渲染；vibeelement 进入真实页面需要
-  `data-page-element` 提供元素级扩展点（下一步，不在本轮范围）。
+- **发布即生效（已闭环）**：`vibeSchemaOf(element)` 把元素装成 schema 里的 `vibe`
+  （`code` + `bindings`），编译时写进 `ColumnSchema` / `FieldSchema` / `QuerySchema` /
+  `ActionSchema` 的同名可选字段。于是「发布」只是把 schema 写进注册表，线上页面拿到的
+  同一份 JSON 里就带着模板，不需要第二次转换、也没有第二套页面运行时。
+
+```jsonc
+{ "prop": "status", "label": "状态",
+  "vibe": { "code": "<el-tag :type=\"value === 1 ? 'success' : 'info'\">{{ value }}</el-tag>",
+            "bindings": [{ "channel": "column.value", "kind": "data", "source": "value" }] } }
+```
+
+- **唯一的运行期**：`data-page-element` 的 `VibeElement.vue` —— 设计器预览、运行预览、
+  发布后的真实页面共用同一个实现（渲染走 Vue 运行期编译器，按需 `import()`），
+  因此「预览里长什么样」就是「上线后长什么样」。
+- **数据与事件**：槽位宿主算好取值（`value` / `row` / `label` / `options` / `model` / `filters`）
+  交给模板；事件按 `VibeBindingSchema.action` 执行（`navigate` / `request` / `reload` /
+  `dialog` / `emit`）。不配动作也有合理默认：单元格点击 = 看详情、行按钮点击 = 点默认按钮、
+  表单/查询控件 `change` = 回写值。`navigate` 由宿主决定（应用内注入 `router.push`，
+  缺省 `location.assign`）。
+- **没配 / 被拒**：没写 `code` 的元素按角色默认样式渲染；模板被 `inspectCode` 拒绝时落
+  `vibe-code-rejected` 诊断并退回默认样式——写错只影响这个元素，不会白屏。
 
 ## 界面
 

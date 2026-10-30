@@ -21,6 +21,8 @@ import CrudFilterBar from './CrudFilterBar.vue'
 import CrudFormDialog from './CrudFormDialog.vue'
 import CrudTreePanel from './CrudTreePanel.vue'
 import HelpHint from './HelpHint.vue'
+import VibeElement from './VibeElement.vue'
+import { provideVibeHost, vibeHandlers, type VibeHandler, type VibeHost } from './vibe'
 
 const props = defineProps<{
   schema: CrudPageSchema
@@ -33,10 +35,14 @@ const props = defineProps<{
   /** 字典解析：`dict` 语义的列与查询条件使用。 */
   dictLabel?: ((type: string, value: unknown) => string | undefined) | undefined
   dictOptions?: ((type: string) => FieldOption[]) | undefined
+  /** 活元素的跳转实现（`navigate` 动作），缺省用 `location.assign`。 */
+  navigate?: ((path: string) => void) | undefined
 }>()
 
 const emit = defineEmits<{
   (event: 'detail', row: Row): void
+  /** 活元素的 `emit` 动作：宿主可挂总线或埋点。 */
+  (event: 'vibe', payload: { channel: string; payload: unknown; row: Row }): void
 }>()
 
 defineSlots<Record<string, (props: { row: Row; value: unknown }) => unknown>>()
@@ -44,6 +50,22 @@ defineSlots<Record<string, (props: { row: Row; value: unknown }) => unknown>>()
 const http = resolveTransport(props.transport)
 const can = (permission?: string): boolean => props.can ? props.can(permission) : true
 const notifier = props.notifier ?? elementNotifier
+
+// 活元素的宿主能力：请求、重载、详情、跳转、派发，模板拿不到这些东西本身。
+const vibeHost: VibeHost = {
+  http,
+  reload: () => void page.load(),
+  openDetail: (row) => emit('detail', row),
+  ...(props.navigate ? { navigate: props.navigate } : {}),
+  notify: (message, kind) => {
+    if (kind === 'success') notifier.success(message)
+    else if (kind === 'error') notifier.error(message)
+    else if (notifier.info) notifier.info(message)
+    else notifier.error(message)
+  },
+  dispatch: (event) => emit('vibe', event),
+}
+provideVibeHost(vibeHost)
 
 const page = usePage<Row>(http, props.schema)
 
@@ -119,6 +141,25 @@ function exportCsv(): void {
 function disabledOf(action: ReturnType<typeof resolveActions>[number], row: Row): boolean {
   return action.disabled(row)
 }
+
+/** 自定义行按钮的取值：`value` / `label` / `disabled` 都能直接用。 */
+function actionDataOf(action: ReturnType<typeof resolveActions>[number], row: Row): Record<string, unknown> {
+  return {
+    value: action.schema.label,
+    label: action.schema.label,
+    row,
+    disabled: action.disabled(row),
+  }
+}
+
+/** 自定义行按钮默认「点一下等于点默认按钮」；声明了 click 动作则以动作为准。 */
+function actionHandlersOf(action: ReturnType<typeof resolveActions>[number], row: Row): Record<string, VibeHandler> {
+  return vibeHandlers(action.schema.vibe, vibeHost, row, {
+    click: () => {
+      if (!action.disabled(row)) void action.run(row)
+    },
+  })
+}
 </script>
 
 <template>
@@ -182,8 +223,14 @@ function disabledOf(action: ReturnType<typeof resolveActions>[number], row: Row)
           >
             <template #default="{ row }">
               <template v-for="action in actions" :key="action.schema.key">
+                <VibeElement
+                  v-if="action.visible(row) && action.schema.vibe?.code && action.schema.vibe"
+                  :vibe="action.schema.vibe"
+                  :data="actionDataOf(action, row)"
+                  :handlers="actionHandlersOf(action, row)"
+                />
                 <el-button
-                  v-if="action.visible(row)"
+                  v-else-if="action.visible(row)"
                   link
                   :type="action.schema.variant === 'danger' ? 'danger' : action.schema.variant === 'warning' ? 'warning' : 'primary'"
                   :disabled="disabledOf(action, row)"

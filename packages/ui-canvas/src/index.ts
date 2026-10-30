@@ -66,6 +66,7 @@ export {
   modelOf,
   validateBindings,
   validateDrawingVibe,
+  vibeSchemaOf,
 } from './vibe.ts'
 
 /** 空白图纸：新建时的唯一初始值。 */

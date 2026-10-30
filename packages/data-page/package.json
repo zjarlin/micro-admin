@@ -28,7 +28,8 @@
     "./use-form-dialog": "./src/useFormDialog.ts",
     "./use-actions": "./src/useActions.ts",
     "./use-references": "./src/useReferences.ts",
-    "./format": "./src/format.ts"
+    "./format": "./src/format.ts",
+    "./vibe": "./src/vibe.ts"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
@@ -95,6 +96,10 @@
       "./format": {
         "types": "./dist/format.d.ts",
         "default": "./dist/format.js"
+      },
+      "./vibe": {
+        "types": "./dist/vibe.d.ts",
+        "default": "./dist/vibe.js"
       }
     }
   }

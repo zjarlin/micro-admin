@@ -12,6 +12,7 @@ import type {
   CrudPageSchema,
   FieldSchema,
   QuerySchema,
+  VibeSchema,
 } from '@zjarlin/data-page/schema'
 import type {
   UiCompiledPage,
@@ -24,6 +25,7 @@ import type {
   UiRole,
 } from './types.ts'
 import { effectiveProps, specOf } from './roles.ts'
+import { inspectCode, vibeSchemaOf } from './vibe.ts'
 import {
   columnWidthOf,
   elementsOfRole,
@@ -125,6 +127,37 @@ function textOf(
   return null
 }
 
+/**
+ * 元素的活模板：只有显式写了 `code` 才下发，且必须通过安全检查。
+ *
+ * 不合法的模板在这里被挡掉并落成 error 诊断，壳会按角色默认样式渲染——
+ * 「模板写错」等于「这个元素没自定义」，而不是整页白屏或静默失效。
+ */
+function vibeOf(ctx: CompileContext, element: UiElement): VibeSchema | null {
+  const vibe = vibeSchemaOf(element)
+  if (!vibe) return null
+  const props = effectiveProps(element)
+  const label = String(props.label ?? element.text ?? element.id)
+  const blocking = inspectCode(vibe.code).filter((issue) => issue.level === 'error')
+  if (blocking.length) {
+    report(ctx, 'error', 'vibe-code-rejected',
+      `元素「${label}」的模板片段被拒绝：${blocking[0]?.message ?? '不合法'}；该元素将按默认样式渲染`, element)
+    return null
+  }
+  for (const binding of element.bindings) {
+    if (binding.kind === 'event' && !binding.action) {
+      report(ctx, 'warn', 'vibe-binding-incomplete',
+        `元素「${label}」的事件通道 ${binding.channel} 没有动作，模板里对应的方法不会做任何事`, element)
+    }
+  }
+  ctx.diagnostics.push({
+    level: 'info', code: 'vibe-attached',
+    message: `元素「${label}」使用自定义模板渲染（通道：${(vibe.bindings ?? []).map((item) => item.channel).join('、') || '无'}）`,
+    elementId: element.id,
+  })
+  return vibe
+}
+
 /** 列 → `ColumnSchema`：宽度优先取显式配置，否则按图纸几何。 */
 function compileColumn(ctx: CompileContext, element: UiElement): ColumnSchema | null {
   const prop = textOf(ctx, element, 'prop')
@@ -155,6 +188,8 @@ function compileColumn(ctx: CompileContext, element: UiElement): ColumnSchema | 
         }
       : {}),
   }
+  const vibe = vibeOf(ctx, element)
+  if (vibe) column.vibe = vibe
   if (props.cell === 'custom' && !props.resolveFrom) {
     report(ctx, 'warn', 'column-custom-without-slot',
       `列「${label}」声明了自定义单元格，但下发的 schema 没有插槽可用，将按文本展示`, element)
@@ -190,6 +225,8 @@ function compileField(
     ...(props.treeEndpoint ? { treeEndpoint: props.treeEndpoint } : {}),
     span: props.span ?? spanOf(element.rect, formRect),
   }
+  const vibe = vibeOf(ctx, element)
+  if (vibe) field.vibe = vibe
   const needsOptions = field.control === 'select' || field.control === 'radio' || field.control === 'treeSelect'
   if (needsOptions && !field.options?.length && !field.dict && !field.treeEndpoint) {
     report(ctx, 'warn', 'field-options-missing',
@@ -225,6 +262,8 @@ function compileQuery(ctx: CompileContext, element: UiElement): QuerySchema | nu
     ...(props.dict ? { dict: props.dict } : {}),
     ...(explicitMatch ?? (control === 'input' ? { match: 'like' as const } : {})),
   }
+  const vibe = vibeOf(ctx, element)
+  if (vibe) query.vibe = vibe
   if (control === 'select' && !query.options?.length && !query.dict) {
     report(ctx, 'error', 'query-options-missing',
       `查询条件「${element.text || prop}」是下拉却没有选项`, element, {
@@ -260,6 +299,7 @@ function compileAction(ctx: CompileContext, element: UiElement): ActionSchema | 
     report(ctx, 'warn', 'action-route-ignored',
       `按钮「${label}」声明了跳转路由 ${props.route}；页面 schema 的动作只有内置分支，跳转请走已有入口`, element)
   }
+  const vibe = vibeOf(ctx, element)
   return {
     key: String(props.prop ?? '').trim() || `${kind}-${element.id}`,
     label,
@@ -270,6 +310,7 @@ function compileAction(ctx: CompileContext, element: UiElement): ActionSchema | 
     ...(props.request ? { request: props.request as NonNullable<ActionSchema['request']> } : {}),
     ...(props.visibleWhen ? { visibleWhen: props.visibleWhen } : {}),
     ...(props.disabledWhen ? { disabledWhen: props.disabledWhen } : {}),
+    ...(vibe ? { vibe } : {}),
   }
 }
 

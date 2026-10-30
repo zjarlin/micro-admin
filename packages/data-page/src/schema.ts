@@ -39,6 +39,38 @@ export interface OptionSource {
   labelProp?: string
 }
 
+/**
+ * vibeelement 绑定：数据通道负责取值，事件通道负责动作。
+ *
+ * 与图纸元素上的绑定同构（`UiElementBinding`），但只保留运行期需要的字段：
+ * 壳拿到它就能回答「值从哪来、点了做什么」，既不需要图纸，也不需要函数。
+ */
+export interface VibeBindingSchema {
+  /** 语义通道：数据 `column.value` / `field.value`，事件 `click` / `change` / `submit` / `select`。 */
+  channel: string
+  kind: 'data' | 'event'
+  /** 数据通道的取值键（宿主上下文里的键，缺省同 `channel`）。 */
+  source?: string
+  /** 事件动作：跳转 / 请求 / 重载 / 弹窗 / 对外派发。 */
+  action?: 'navigate' | 'request' | 'reload' | 'dialog' | 'emit'
+  /** 动作参数（`navigate` 用 `path`，`request` 用 `method` / `path` / `body`）。 */
+  params?: Record<string, unknown>
+  /** 触发条件：不成立时该绑定不生效（行级绑定用）。 */
+  when?: Condition
+}
+
+/**
+ * 元素级活模板（vibeelement）。
+ *
+ * `code` 是**模板片段**而不是脚本：只允许插值与已注册组件，发布前由编译器的
+ * `inspectCode` 把关。没写 `code` 或没通过检查时，壳按角色默认样式渲染——
+ * 所以「配了模板」与「没配模板」是同一个槽位的两种画法，不是两套页面。
+ */
+export interface VibeSchema {
+  code: string
+  bindings?: VibeBindingSchema[]
+}
+
 export interface ColumnSchema {
   /** 取值字段。 */
   prop: string
@@ -66,6 +98,8 @@ export interface ColumnSchema {
    * 也就不会出现改名后两处不一致。
    */
   resolveFrom?: OptionSource & { keyProp?: string }
+  /** 自定义单元格模板：给了就替换默认单元格渲染（表头仍按 `label` 出）。 */
+  vibe?: VibeSchema
 }
 
 /** 表单控件。 */
@@ -130,6 +164,8 @@ export interface FieldSchema {
   rows?: number
   /** `treeSelect` 的数据来源接口。 */
   treeEndpoint?: string
+  /** 自定义控件模板：给了就替换默认控件；标签与必填星号仍由 `required` / `rules` 决定。 */
+  vibe?: VibeSchema
 }
 
 export interface QuerySchema {
@@ -152,6 +188,8 @@ export interface QuerySchema {
   match?: 'eq' | 'like' | 'in'
   /** `like` 参与匹配的字段，缺省 `[prop]`。 */
   props?: string[]
+  /** 自定义查询控件模板：给了就替换默认输入/下拉。 */
+  vibe?: VibeSchema
 }
 
 /** 声明式条件：用于行操作的可见/禁用判断，可被 JSON 表达。 */
@@ -184,6 +222,8 @@ export interface ActionSchema {
   disabledWhen?: Condition
   /** 行级可见条件。 */
   visibleWhen?: Condition
+  /** 自定义按钮模板：模板里的 `@click="onClick"` 等价于点击默认按钮。 */
+  vibe?: VibeSchema
 }
 
 /** 左树（或左列）绑定。 */

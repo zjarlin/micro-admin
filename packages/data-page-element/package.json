@@ -16,7 +16,9 @@
     "./CrudPage.vue": "./src/CrudPage.vue",
     "./TreePage.vue": "./src/TreePage.vue",
     "./notifier": "./src/notifier.ts",
-    "./table-shell.css": "./src/table-shell.css"
+    "./table-shell.css": "./src/table-shell.css",
+    "./VibeElement.vue": "./src/VibeElement.vue",
+    "./vibe": "./src/vibe.ts"
   },
   "publishConfig": {
     "access": "public"

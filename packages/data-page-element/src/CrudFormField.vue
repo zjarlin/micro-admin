@@ -4,9 +4,12 @@
 // 必填星号由 el-form-item 依据 rules 自动生成，与校验规则同源，不另写标记。
 import type { FieldOption, FieldSchema } from '@zjarlin/data-page'
 import type { NormalizedRule } from '@zjarlin/data-page'
+import { vibeScopeData } from '@zjarlin/data-page'
 import HelpHint from './HelpHint.vue'
+import VibeElement from './VibeElement.vue'
+import { useVibeHost, vibeHandlers, type VibeHandler } from './vibe'
 
-defineProps<{
+const props = defineProps<{
   field: FieldSchema
   model: Record<string, unknown>
   editing: boolean
@@ -14,6 +17,28 @@ defineProps<{
   rules?: NormalizedRule[] | undefined
   options?: FieldOption[] | undefined
 }>()
+
+const host = useVibeHost()
+
+/** 自定义控件的取值：`value` / `options` / `model` 都能直接用。 */
+function dataOf(): Record<string, unknown> {
+  return vibeScopeData(props.field.vibe, {
+    value: props.model[props.field.prop],
+    model: props.model,
+    label: props.field.label,
+    options: props.options ?? props.field.options ?? [],
+    editing: props.editing,
+  })
+}
+
+/** 控件默认行为：把值写回表单模型（等价于 v-model）。 */
+function handlersOf(): Record<string, VibeHandler> {
+  return vibeHandlers(props.field.vibe, host, props.model, {
+    change: (payload) => {
+      props.model[props.field.prop] = payload
+    },
+  })
+}
 </script>
 
 <template>
@@ -26,8 +51,12 @@ defineProps<{
       <span class="crud-field__label">{{ field.label }}<HelpHint :text="field.help" :label="field.label" /></span>
     </template>
 
+    <div v-if="field.vibe?.code" class="crud-field__vibe">
+      <VibeElement :vibe="field.vibe" :data="dataOf()" :handlers="handlersOf()" />
+    </div>
+
     <el-select
-      v-if="field.control === 'select' || field.control === 'treeSelect'"
+      v-else-if="field.control === 'select' || field.control === 'treeSelect'"
       v-model="model[field.prop]"
       :placeholder="field.placeholder ?? `请选择${field.label}`"
       :disabled="editing && field.disabledOnEdit"
@@ -74,4 +103,6 @@ defineProps<{
 
 <style scoped>
 .crud-field__label { display: inline-flex; align-items: center; }
+/* 自定义控件占满表单项，宽度与内置控件一致。 */
+.crud-field__vibe { width: 100%; min-width: 0; }
 </style>

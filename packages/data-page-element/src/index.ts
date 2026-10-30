@@ -10,9 +10,12 @@ import { elementNotifier } from './notifier.ts'
 import SchemaPage from './SchemaPage.vue'
 import CrudPage from './CrudPage.vue'
 import TreePage from './TreePage.vue'
+import VibeElement from './VibeElement.vue'
 
-export { elementNotifier, SchemaPage, CrudPage, TreePage }
+export { elementNotifier, SchemaPage, CrudPage, TreePage, VibeElement }
 export { resolveTransport } from './transport.ts'
+export { provideVibeHost, useVibeHost, vibeHandlers } from './vibe.ts'
+export type { VibeHandler, VibeHost } from './vibe.ts'
 export type { Notifier } from '@zjarlin/data-page'
 
 /**

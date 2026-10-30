@@ -9,6 +9,8 @@
 // 真正的编译渲染在 `@zjarlin/data-page-element` 的 VibeElement.vue 里，
 // 这样同一份 vibeelement 也能被将来别的框架壳复用。
 
+import { vibeHandlerName } from '@zjarlin/data-page/vibe'
+import type { VibeSchema } from '@zjarlin/data-page/schema'
 import type { UiElement, UiElementProps } from './types.ts'
 import { effectiveProps, specOf } from './roles.ts'
 
@@ -215,9 +217,35 @@ export function handlerNamesOf(element: UiElement): Record<string, string> {
   const handlers: Record<string, string> = {}
   for (const binding of element.bindings) {
     if (binding.kind !== 'event') continue
-    handlers[binding.channel] = `on${binding.channel[0]?.toUpperCase() ?? ''}${binding.channel.slice(1)}`
+    // 推导放在 `@zjarlin/data-page/vibe`：图纸包与 UI 壳必须给出同一个名字。
+    handlers[binding.channel] = vibeHandlerName(binding.channel)
   }
   return handlers
+}
+
+/**
+ * 元素 → 可直接下发的 `vibe` 片段。
+ *
+ * 设计器预览与编译器发布共用这一处转换，所以「预览里跑的模板」与
+ * 「上线后下发的模板」永远是同一份；没声明动作的事件通道在这里被丢弃
+ * （留着只会让模板里的方法点了没反应）。
+ */
+export function vibeSchemaOf(element: UiElement): VibeSchema | null {
+  const code = String((effectiveProps(element) as { code?: string }).code ?? '').trim()
+  if (!code) return null
+  const bindings: NonNullable<VibeSchema['bindings']> = []
+  for (const binding of element.bindings) {
+    if (binding.kind === 'event' && !binding.action) continue
+    bindings.push({
+      channel: binding.channel,
+      kind: binding.kind,
+      ...(binding.source ? { source: binding.source } : {}),
+      ...(binding.action ? { action: binding.action } : {}),
+      ...(binding.params ? { params: binding.params } : {}),
+      ...(binding.when ? { when: binding.when } : {}),
+    })
+  }
+  return bindings.length ? { code, bindings } : { code }
 }
 
 /** 校验一份图纸里所有元素的 vibeelement 部分（供设计器保存前调用）。 */

@@ -71,6 +71,7 @@ schema.ts ──┤ CrudPageSchema（唯一契约）                            
 | --- | --- |
 | `cell` | `text` / `code` / `status` / `tagMap` / `datetime` / `dict` / `link` / `custom` |
 | `resolveFrom` | 存 id、显示另一份资源的字段（如用户表显示部门名），避免冗余名称 |
+| `vibe` | 元素级活模板（`code` + 数据/事件绑定）；给了就替换默认单元格渲染 |
 
 字段级（`FieldSchema`）：
 
@@ -80,6 +81,7 @@ schema.ts ──┤ CrudPageSchema（唯一契约）                            
 | `optionsFrom` | 下拉选项来自另一份资源端点 |
 | `disabledOnEdit` | 编辑时不可改（如用户名） |
 | `help` | 说明文字，渲染成标签旁的小问号 |
+| `vibe` | 元素级活模板；给了就替换默认控件，标签与必填星号仍由 `required` / `rules` 决定 |
 
 查询级（`QuerySchema`）：
 
@@ -87,6 +89,7 @@ schema.ts ──┤ CrudPageSchema（唯一契约）                            
 | --- | --- |
 | `match` | `eq` / `like` / `in`，缺省按控件推断（select→eq，input→like） |
 | `props` | `like` 参与匹配的字段；一个输入框可以匹配多列 |
+| `vibe` | 元素级活模板；给了就替换默认输入/下拉 |
 
 树级（`TreeSchema`）：
 
@@ -95,6 +98,9 @@ schema.ts ──┤ CrudPageSchema（唯一契约）                            
 | `parentProp` | 给了就是扁平表（客户端/服务端建树）；不给表示已是嵌套 `children` |
 | `param` / `filterProp` | 选中节点写入的查询参数名 / 列表行上的过滤字段 |
 | `includeDescendants` | 选中父节点是否含下级，缺省 `true` |
+
+行操作（`ActionSchema`）同样支持 `vibe`：给了就按模板渲染按钮，
+模板里的 `@click="onClick"` 等价于点击默认按钮（权限、禁用条件照常生效）。
 
 ## 3. HTTP 契约
 

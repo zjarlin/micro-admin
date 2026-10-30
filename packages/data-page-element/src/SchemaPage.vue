@@ -22,10 +22,13 @@ const props = defineProps<{
   dictOptions?: ((type: string) => FieldOption[]) | undefined
   /** schema 接口前缀，缺省 `/ui/pages`。 */
   basePath?: string
+  /** 活元素的跳转实现（`navigate` 动作），缺省用 `location.assign`。 */
+  navigate?: ((path: string) => void) | undefined
 }>()
 
 const emit = defineEmits<{
   (event: 'detail', row: Row): void
+  (event: 'vibe', payload: { channel: string; payload: unknown; row: Row }): void
 }>()
 
 defineSlots<Record<string, (props: { row: Row; value: unknown }) => unknown>>()
@@ -77,7 +80,9 @@ onMounted(async () => {
       :transport="transport"
       :can="can"
       :dict-label="dictLabel"
+      :navigate="navigate"
       @detail="emit('detail', $event)"
+      @vibe="emit('vibe', $event)"
     >
       <template v-for="(_, name) in $slots" #[name]="slotProps">
         <slot :name="name" v-bind="slotProps" />
@@ -90,7 +95,9 @@ onMounted(async () => {
       :can="can"
       :dict-label="dictLabel"
       :dict-options="dictOptions"
+      :navigate="navigate"
       @detail="emit('detail', $event)"
+      @vibe="emit('vibe', $event)"
     >
       <template v-for="(_, name) in $slots" #[name]="slotProps">
         <slot :name="name" v-bind="slotProps" />

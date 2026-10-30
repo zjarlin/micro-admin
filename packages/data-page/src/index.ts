@@ -18,8 +18,12 @@ export type {
   TagTone,
   TreeSchema,
   ValidationRule,
+  VibeBindingSchema,
+  VibeSchema,
 } from './schema.ts'
 export { interpolate, matchCondition } from './schema.ts'
+
+export { vibeEventChannels, vibeHandlerName, vibeScopeData, vibeSourceKey } from './vibe.ts'
 
 export type {
   PageRegistry,

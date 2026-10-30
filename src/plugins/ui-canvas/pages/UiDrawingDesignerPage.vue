@@ -14,13 +14,14 @@ import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
 import {
   ROLE_LIST, channelsOf, createEmptyDrawing, defaultCodeOf, effectiveProps, isContainer,
-  findElement, handlerNamesOf, inspectCode, modelOf, regionsOf, specOf, validateBindings,
+  findElement, inspectCode, regionsOf, specOf, validateBindings, vibeSchemaOf,
   type UiDiagnostic, type UiDrawing, type UiElement, type UiElementProps, type UiQuestion, type UiRect, type UiRole,
 } from '@/shared/ui-canvas'
 import type { UiCompileResponse } from '@/shared/ui-canvas/http'
 import { createUiCanvasApi, parseDrawing } from '@/shared/ui-canvas/http'
 import DrawingCanvas from '@/components/ui-canvas/DrawingCanvas.vue'
-import VibeElement from '@/components/ui-canvas/VibeElement.vue'
+// 预览与线上页面共用同一个活元素运行时，不维护第二套渲染实现。
+import VibeElement from '@zjarlin/data-page-element/VibeElement.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -54,7 +55,6 @@ const selected = computed<UiElement | null>(() => {
 const selectedSpec = computed(() => (selected.value ? specOf(selected.value.role) : null))
 const selectedProps = computed<UiElementProps>(() => (selected.value ? effectiveProps(selected.value) : {}))
 const selectedChannels = computed(() => (selected.value ? channelsOf(selected.value) : []))
-const selectedHandlers = computed(() => (selected.value ? handlerNamesOf(selected.value) : {}))
 
 /**
  * 元素树：容器进「页面骨架」，叶子按所属区域归组，编辑器里一眼看清「谁在哪个区域里」。
@@ -330,18 +330,21 @@ const vibeHandlers = computed<Record<string, (payload?: unknown) => void>>(() =>
   return out
 })
 
-/** vibeelement 的预览数据：用当前选中元素 + 一行示例值，直接看模板渲染成什么。 */
-const vibePreview = computed(() => {
-  if (!selected.value) return null
+/** 当前元素的活模板：与发布时下发的 `vibe` 是同一份转换。 */
+const selectedVibe = computed(() => (selected.value ? vibeSchemaOf(selected.value) : null))
+
+/** 预览数据：一行示例值，直接看模板渲染成什么。 */
+const vibePreviewData = computed<Record<string, unknown>>(() => {
+  if (!selected.value) return {}
   const props = selectedProps.value
-  return modelOf(selected.value, {
-    data: {
-      value: props.value ?? '示例值',
-      text: String(props.label ?? selected.value.text ?? '示例文本'),
-      total: 18,
-    },
-    handlers: selectedHandlers.value,
-  })
+  const label = String(props.label ?? selected.value.text ?? '按钮')
+  return {
+    value: props.value ?? '示例值',
+    label,
+    text: String(props.label ?? selected.value.text ?? '示例文本'),
+    series: [],
+    total: 18,
+  }
 })
 
 // ---------------- 保存 / 发布 / AI ----------------
@@ -840,13 +843,12 @@ onBeforeUnmount(() => {
                 <span class="form-label">实时预览</span>
                 <div class="vibe-preview">
                   <VibeElement
-                    v-if="vibePreview && selected"
-                    :element="selected"
-                    :model="vibePreview"
+                    v-if="selectedVibe && selectedVibe.code"
+                    :vibe="selectedVibe"
+                    :data="vibePreviewData"
                     :handlers="vibeHandlers"
-                    :context="{ label: String(selectedProps.label ?? selected.text ?? '按钮'), value: selectedProps.value ?? '', text: String(selectedProps.label ?? selected.text ?? '示例文本'), series: [] }"
                   />
-                  <span v-else class="muted">暂无预览</span>
+                  <span v-else class="muted">该元素还没写模板片段（按角色默认样式上线）</span>
                 </div>
               </div>
               <p v-if="selectedIssues.length" class="issue-list">
