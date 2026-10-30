@@ -139,6 +139,9 @@ function scheduleRecompile(): void {
 }
 
 watch(() => drawing.value, () => {
+  // 载入图纸本身会触发这里（赋值即变更），但那是「从后端取回」而不是「用户改了」；
+  // 不挡住的话打开设计器就显示「未保存」，预览/发布还会先多做一次无谓保存。
+  if (loading.value) return
   dirty.value = true
   scheduleRecompile()
 }, { deep: true })
