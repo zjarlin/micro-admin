@@ -43,16 +43,40 @@ export const reportPlugin: PluginDefinition = {
 }
 ```
 
-然后在 `src/plugins/index.ts` 注册：
+然后在两处登记：
 
 ```ts
-export const pluginCatalog: PluginDefinition[] = [
-  coreAdminPlugin,
-  systemPlugin,
-  monitorPlugin,
-  reportPlugin,
-]
+// src/plugins/modules.ts —— id → 模块入口（不支持 import 别名，写仓库根相对路径）
+export const pluginModules = {
+  // ...
+  report: { file: '/src/plugins/report', export: 'reportPlugin' },
+}
+
+// src/shared/plugin-profiles.ts —— 哪些发行形态会带上它
+export const pluginProfiles = {
+  admin: ['core-admin', 'user', 'rbac', 'dict', 'settings', 'monitor', 'report'],
+  desktop: ['core-admin', 'user', 'dict'],
+} as const
 ```
+
+`build/plugin-catalog.ts` 在构建期按档位生成虚拟模块 `virtual:plugin-catalog`（只有入档插件的 `import()`），
+`src/plugins/index.ts` 只消费它。因此没入档的插件连 chunk 都不会产出；构建档位与运行档位不一致会直接报错。
+
+## 1.1 目录约定：一个插件一个目录
+
+```text
+src/plugins/<id>/
+  index.ts      # PluginDefinition + setup()
+  routes.ts     # 路由/菜单贡献
+  data.ts       # 页面 schema（服务端也 import，必须保持与 Vue 无关）
+  seed.ts       # 首次启动的种子数据
+  pages/        # 页面组件
+```
+
+- `data.ts` / `seed.ts` 不许 import Vue：`server/app.ts` 会直接跑 TS 读它们来装配页面与种子。
+- 插件的页面归插件自己；`src/schema/` 只留装配层（`registry.ts` / `page-sources.ts` / `seed.ts`）与本仓库演示页。
+- 插件想增强别的插件的页面时，用「服务端 schema 追加」而不是改对方文件，例如
+  `plugins/rbac/user-extension.ts` 给用户页补部门/角色列与左树：装了 `rbac` 才有，没装就是纯账号表。
 
 `setup()` 内通过 `ctx.routes/menus/services/commands/slots/events` 注册的内容会被内核自动记录；停用插件时自动解绑，不需要手动逐个删除。返回的函数用于关闭定时器、WebSocket、第三方订阅等内核无法自动回收的资源。
 
@@ -68,6 +92,7 @@ setup 抛错 → rollback 已注册贡献 → failed（错误写入插件状态�
 ```
 
 - `requires` 是强依赖：依赖未启用时不允许启用。
+- `optionalRequires` 是弱依赖：声明「有它就更完整」，不存在也不影响启动（例如 `rbac` 对 `user`）。
 - 停用被依赖插件时，依赖它的插件会先停用，避免留下悬空消费者。
 - 重复插件 ID、缺失依赖、循环依赖、重复贡献 ID 都会直接报错。
 - `contextFor(id)` 只用于宿主读取插件已注册的命令；业务插件之间通过 service token 或 command 协作。

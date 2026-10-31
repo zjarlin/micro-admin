@@ -18,6 +18,8 @@ export interface HostDeps {
   kv: KeyValueStore
   corsOrigins?: string[] | undefined
   staticDir?: string | undefined
+  /** 插件档位（admin / desktop）：决定挂载哪些页面与接口，前端需用同一档位构建。 */
+  profile?: string | undefined
 }
 
 export interface HostApp extends CreatedApp {
@@ -28,18 +30,18 @@ export interface HostApp extends CreatedApp {
 export function createApp(deps: HostDeps): HostApp {
   const scada = createScadaPlugin({ kv: deps.kv })
   // 图纸插件必须拿到「已装配的注册表」：发布就是把编译结果 upsert 进去。
-  const registry = createPageRegistry(deps.schemas)
+  const registry = createPageRegistry(deps.schemas, deps.profile)
   const uiCanvas = createUiCanvasPlugin({ kv: deps.kv, registry })
 
   const created = createUiApp({
     pages: deps.pages,
     runtime: deps.runtime,
     registry,
-    seed: seedPages,
+    seed: () => seedPages(deps.profile),
     extensions: [scada, uiCanvas],
     ...(deps.corsOrigins ? { corsOrigins: deps.corsOrigins } : {}),
     ...(deps.staticDir ? { staticDir: deps.staticDir } : {}),
   })
 
-  return { ...created, seed: seedPages }
+  return { ...created, seed: () => seedPages(deps.profile) }
 }

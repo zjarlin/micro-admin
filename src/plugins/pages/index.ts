@@ -23,6 +23,16 @@ export const pagesPlugin: PluginDefinition = {
   requires: ['core-admin'],
   defaultEnabled: true,
   async setup(ctx) {
+    // 兜底：任何 `/p/<key>` 都按后端下发的 schema 渲染。
+    // 后端新登记一个页面（哪怕没写 menu）后，这里不需要改代码。
+    ctx.routes.add({
+      name: 'schema-page',
+      path: '/p/:pageKey',
+      component: () => import('./DynamicSchemaPage.vue'),
+      title: '通用页面',
+      permission: 'system:page:view',
+    })
+
     let pages: PageSchemaPayload[] = []
     try {
       pages = await ctx.http.request<PageSchemaPayload[]>('/ui/pages')

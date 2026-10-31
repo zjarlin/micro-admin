@@ -1,10 +1,13 @@
-// 用户管理页面 schema：原来 169 行的手写页面，现在只剩这份声明。
+// 用户插件的页面声明：只管「账号本身」。
+//
+// 部门、角色属于 RBAC 插件，用户插件不引用它们（否则工具类产品只想要一张用户表时会被迫装权限体系）。
+// RBAC 挂载时由 `rbac` 插件给这份 schema 追加列、表单字段与左树，见 `plugins/rbac/user-extension.ts`。
 import type { CrudPageSchema } from '@zjarlin/data-page'
 
 export const userPage: CrudPageSchema = {
   key: 'system.user',
   title: '用户管理',
-  description: '维护登录账号、所属部门与角色。删除内置管理员会被服务端拒绝。',
+  description: '维护登录账号与联系方式。删除内置管理员会被服务端拒绝。',
   entity: '用户',
   endpoint: '/system/users',
   exportable: true,
@@ -38,19 +41,6 @@ export const userPage: CrudPageSchema = {
   ],
   columns: [
     { prop: 'nickname', label: '用户', minWidth: 180, cell: 'custom', slot: 'user-cell' },
-    {
-      prop: 'deptId',
-      label: '部门',
-      minWidth: 130,
-      // 存 id、显示名称：部门改名后列表自动跟着变，不在用户表冗余名称。
-      resolveFrom: { endpoint: '/system/departments', keyProp: 'id', labelProp: 'name' },
-    },
-    {
-      prop: 'roleId',
-      label: '角色',
-      width: 120,
-      resolveFrom: { endpoint: '/system/roles', keyProp: 'id', labelProp: 'name' },
-    },
     { prop: 'phone', label: '手机号', width: 130 },
     { prop: 'email', label: '邮箱', minWidth: 170 },
     {
@@ -70,20 +60,6 @@ export const userPage: CrudPageSchema = {
     { prop: 'nickname', label: '昵称', control: 'input', required: true },
     { prop: 'phone', label: '手机号', control: 'input', placeholder: '11 位手机号' },
     { prop: 'email', label: '邮箱', control: 'input', rules: [{ kind: 'email' }], placeholder: 'name@example.com' },
-    {
-      prop: 'deptId',
-      label: '部门',
-      control: 'select',
-      span: 12,
-      optionsFrom: { endpoint: '/system/departments', valueProp: 'id', labelProp: 'name' },
-    },
-    {
-      prop: 'roleId',
-      label: '角色',
-      control: 'select',
-      span: 12,
-      optionsFrom: { endpoint: '/system/roles', valueProp: 'id', labelProp: 'name' },
-    },
     {
       prop: 'status',
       label: '状态',
@@ -116,15 +92,9 @@ export const userPage: CrudPageSchema = {
       confirm: '删除用户 {nickname} 后不可恢复，确定继续？',
     },
   ],
-  tree: {
-    endpoint: '/system/departments',
-    idProp: 'id',
-    labelProp: 'name',
-    parentProp: 'parentId',
-    param: 'deptId',
-    filterProp: 'deptId',
-    allLabel: '全部部门',
-    captionProp: 'leader',
-    searchable: true,
-  },
+}
+
+/** 本插件贡献的页面基线，key 即页面标识。 */
+export const userPages: Record<string, CrudPageSchema> = {
+  'system.user': userPage,
 }

@@ -45,3 +45,8 @@ export const dictPage: CrudPageSchema = {
     },
   ],
 }
+
+/** 本插件贡献的页面基线。 */
+export const dictPages: Record<string, CrudPageSchema> = {
+  'system.dict': dictPage,
+}

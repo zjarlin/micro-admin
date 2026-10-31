@@ -7,7 +7,7 @@
 图纸（UiDrawing，纯 JSON）
       │  compileDrawing
       ▼
-CrudPageSchema  ←── 与手写 schema（src/schema/user.ts）完全同构
+CrudPageSchema  ←── 与手写 schema（src/plugins/user/data.ts）完全同构
       │  PUT /ui/pages/{key}
       ▼
 createStoredRegistry → GET /ui/pages → pagesPlugin 自动挂路由+菜单

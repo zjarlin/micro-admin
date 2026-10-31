@@ -6,6 +6,8 @@ import { corsOrigins, createSqliteStores, loadConfig } from '@zjarlin/ui-server'
 import { createApp } from './app.ts'
 
 const config = loadConfig()
+// 插件档位：前后端必须一致（前端 VITE_PLUGIN_PROFILE，后端 PLUGIN_PROFILE）。
+const profile = (process.env.PLUGIN_PROFILE ?? '').trim() || 'admin'
 const stores = createSqliteStores(config.DB_PATH)
 
 const { app } = createApp({
@@ -19,10 +21,12 @@ const { app } = createApp({
   kv: stores.kv,
   corsOrigins: corsOrigins(config),
   staticDir: config.STATIC_DIR,
+  profile,
 })
 
 serve({ fetch: app.fetch, hostname: config.SERVER_HOST, port: config.SERVER_PORT }, (info) => {
   console.log(`[server] listening on http://${config.SERVER_HOST}:${info.port}`)
   console.log(`[server] sqlite ${config.DB_PATH}`)
+  console.log(`[server] plugin profile ${profile}`)
   console.log(`[server] 页面可写：PUT /api/ui/pages/{key}`)
 })

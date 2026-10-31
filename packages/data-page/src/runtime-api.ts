@@ -255,13 +255,17 @@ export function createRuntimeApi(engine: PageEngine, store: RuntimeStore): Runti
       if (path === '/dashboard/overview' && method === 'GET') {
         const data = ensure()
         const users = engine.rows('/system/users')
-        const roles = engine.rows('/system/roles')
+        // 指标跟随实际装配的页面：没装 RBAC（只有用户表的产品）就不显示角色指标。
+        const hasRoles = Object.hasOwn(engine.registry.schemas(), 'system.role')
+        const roles = hasRoles ? engine.rows('/system/roles') : []
         return {
           status: 200,
           data: {
             metrics: [
               { label: '用户总数', value: users.length, unit: '人', delta: 12.5, trend: 'up' },
-              { label: '启用角色', value: roles.filter((role) => role.status === 'active').length, unit: '个', delta: 2.4, trend: 'up' },
+              ...(hasRoles
+                ? [{ label: '启用角色', value: roles.filter((role) => role.status === 'active').length, unit: '个', delta: 2.4, trend: 'up' }]
+                : []),
               { label: '今日登录', value: data.loginLogs.filter((log) => log.createdAt.startsWith(new Date().toISOString().slice(0, 10))).length, unit: '次', delta: 8.1, trend: 'up' },
               { label: '异常操作', value: data.operationLogs.filter((log) => log.status === 'fail').length, unit: '条', delta: -14.2, trend: 'down' },
             ],

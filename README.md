@@ -92,9 +92,34 @@ Vue 宿主
   │   ├─ 事件总线（event）
   │   └─ 贡献注册表（route / menu / slot / widget）
   ├─ 插件：core-admin   登录、工作台、插件中心、个人中心
-  ├─ 插件：system       用户、角色、菜单、部门、岗位、字典、参数、公告
+  ├─ 插件：user         用户表与账号（可单独打包，不依赖 RBAC）
+  ├─ 插件：rbac         角色/部门/岗位/菜单（可选；装了才给用户页补部门与角色）
+  ├─ 插件：dict         字典
+  ├─ 插件：settings     参数设置、通知公告
   └─ 插件：monitor      在线用户、定时任务、服务监控、缓存监控
 ```
+
+### 插件档位（发行形态）
+
+用户、字典、RBAC 是三个独立插件，按需装配：
+
+| 档位 | 插件 | 用途 |
+| --- | --- | --- |
+| `admin`（默认） | 全部 | 完整后台 |
+| `desktop` | `core-admin` + `user` + `dict` | 「组态王」这类只有用户表的工具类产品，不带角色/部门/菜单 |
+
+```bash
+VITE_PLUGIN_PROFILE=desktop pnpm dev            # 前端（等价 pnpm dev:desktop）
+PLUGIN_PROFILE=desktop pnpm start:server        # 后端（等价 pnpm start:server:desktop）
+VITE_PLUGIN_PROFILE=desktop pnpm build:desktop  # 出桌面档位产物
+```
+
+- 前后端**必须同一档位**，否则会出现「前端有菜单、后端没接口」；取到未知档位直接报错。
+- 档位裁剪发生在**构建期**：`build/plugin-catalog.ts` 按 `src/plugins/modules.ts`（id→模块）与
+  `src/shared/plugin-profiles.ts`（档位）生成虚拟模块 `virtual:plugin-catalog`，
+  未入档的插件不会出现在产物里（桌面档位实测 47 个文件，不含角色/部门/组态 chunk）。
+- 没装 `rbac` 时：`/system/roles`、`/system/departments` 等接口不注册，
+  用户页也不会有部门/角色列与部门左树（由 `plugins/rbac/user-extension.ts` 挂载时追加）。
 
 关键约束：
 
@@ -116,8 +141,12 @@ packages/                     # 可被别的项目依赖的工作区包
 src/
   kernel/                     # 与业务无关的微内核
   plugins/
+    modules.ts                # 插件 id → 模块入口（构建期生成加载器的唯一来源）
     core-admin/               # 登录、工作台、插件中心、404、个人中心
-    system/                   # 若依式系统管理模块
+    user/                     # 用户表与账号（data.ts / seed.ts / routes.ts / pages/）
+    rbac/                     # 角色、部门、岗位、菜单 + 用户页增强
+    dict/                     # 字典
+    settings/                 # 参数设置、通知公告
     monitor/                  # 系统监控模块
     scada/                    # 组态画布工作台
     pages/                    # 把后端登记的页面变成路由与菜单
@@ -197,6 +226,8 @@ pnpm build:packages     # packages/{data-page,ui-server} → dist/*.{js,d.ts}
 - 统一使用 `pnpm`，Node.js 22+（`node:sqlite` 仍是实验特性，启动会打印一行警告）。
 - 通用能力进 `packages/*`，业务配置进 `src/schema/`，宿主装配进 `server/`；三层不互相反向依赖。
 - 页面权限通过路由 `meta.permission` + 菜单 `permission` 双重声明。
-- 新业务域只新增 `src/plugins/<id>/index.ts` 并加入 `src/plugins/index.ts`；宿主不感知具体页面。
+- 新业务域只新增 `src/plugins/<id>/`（`index.ts` + `routes.ts` + `data.ts` + `seed.ts` + `pages/`），
+  并加入 `src/plugins/index.ts` 与 `src/shared/plugin-profiles.ts` 的档位清单；宿主不感知具体页面。
+- 插件自带的页面/种子/接口归插件目录；`src/schema/` 只留前后端共用的装配层与本仓库演示页。
 - 不在插件里直接访问 `localStorage` 会话或 `import.meta.env`；通过 `PluginContext` 与共享 service 获取能力。
 - 生产构建开启 sourcemap，按 Element Plus、Vue 运行时与插件页面拆包；如需关闭可在 `vite.config.ts` 调整。

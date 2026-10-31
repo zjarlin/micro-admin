@@ -16,7 +16,11 @@
     "verify": "pnpm typecheck && pnpm test && pnpm build",
     "dev:server": "node --env-file-if-exists=.env.local server/main.ts",
     "start:server": "node server/main.ts",
-    "typecheck:server": "tsc -b server"
+    "typecheck:server": "tsc -b server",
+    "dev:desktop": "VITE_PLUGIN_PROFILE=desktop vite --host 0.0.0.0",
+    "dev:server:desktop": "PLUGIN_PROFILE=desktop node --env-file-if-exists=.env.local server/main.ts",
+    "build:desktop": "VITE_PLUGIN_PROFILE=desktop pnpm build",
+    "start:server:desktop": "PLUGIN_PROFILE=desktop node server/main.ts"
   },
   "dependencies": {
     "@zjarlin/data-page": "workspace:*",

@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { MicroKernel, type PluginDefinition } from '@/kernel'
-import { pluginCatalog } from '@/plugins'
+import { loadPluginCatalog } from '@/plugins'
 import { http } from '@/shared/api'
 import { useSessionStore } from '@/stores/session'
 
@@ -41,10 +41,13 @@ export function compilePluginRoutes(instance: MicroKernel): RouteRecordRaw[] {
   return [{ path: '/', component: Layout, redirect: '/dashboard', children }]
 }
 
-export async function bootKernel(plugins: PluginDefinition[] = pluginCatalog): Promise<MicroKernel> {
+export async function bootKernel(plugins?: PluginDefinition[]): Promise<MicroKernel> {
   if (kernel) return kernel
+  const definitions = plugins ?? (await loadPluginCatalog())
   kernel = new MicroKernel({
-    plugins,
+    plugins: definitions,
+    // 档位已经在插件清单里裁过一次；这里显式给出启用表，避免 defaultEnabled 与档位打架。
+    enabled: Object.fromEntries(definitions.map((plugin) => [plugin.id, plugin.defaultEnabled !== false])),
     onError: (pluginId, error) => console.error(`[kernel] plugin ${pluginId} failed`, error),
   })
   kernel.provideService('http', http)
