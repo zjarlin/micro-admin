@@ -54,14 +54,32 @@ export function sanitizeDecisions(raw: unknown): AiExtrusionDecision[] {
   return out
 }
 
+/**
+ * 装配缺参追问的模型配置。
+ *
+ * 密钥只有一份来源：优先 `SUB2API_*`，没有就复用 `AI_*`（AI 插件用的同一把网关 key），
+ * 因此部署侧只要配好 `AI_BASE_URL`/`AI_API_KEY`，缺参追问与 AI 助手就同时可用，
+ * 不需要为了这个功能再写一遍密钥。
+ */
 export function extrusionAiFromEnv(env: NodeJS.ProcessEnv = process.env): ExtrusionAiOptions | null {
-  return sub2apiFromEnv(env, {
+  const direct = sub2apiFromEnv(env, {
     model: 'EXTRUSION_MODEL',
     background: 'EXTRUSION_AI_BACKGROUND',
     timeout: 'EXTRUSION_AI_TIMEOUT_MS',
     poll: 'EXTRUSION_AI_POLL_MS',
     defaultModel: 'gpt-4.1-mini',
   })
+  if (direct) return direct
+  const apiKey = (env.AI_API_KEY ?? '').trim()
+  if (!apiKey) return null
+  return {
+    baseUrl: (env.AI_BASE_URL ?? 'http://127.0.0.1:18080').replace(/\/+$/, ''),
+    apiKey,
+    model: (env.EXTRUSION_MODEL ?? env.AI_MODEL ?? 'gpt-4.1-mini').trim(),
+    background: (env.EXTRUSION_AI_BACKGROUND ?? '1') !== '0',
+    timeoutMs: Number(env.EXTRUSION_AI_TIMEOUT_MS ?? 90_000) || 90_000,
+    pollIntervalMs: Number(env.EXTRUSION_AI_POLL_MS ?? 900) || 900,
+  }
 }
 
 export function aiStatusOf(options: ExtrusionAiOptions | null): ExtrusionAiStatus {
