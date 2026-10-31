@@ -13,6 +13,7 @@ export const pluginProfiles = {
     'dict',
     'settings',
     'monitor',
+    'canvas',
     'scada',
     'ui-canvas',
     'pages',

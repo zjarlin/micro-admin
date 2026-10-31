@@ -1,11 +1,16 @@
 import type { MenuContribution, RouteContribution } from '@/kernel'
 
-/** 图纸相关页面：库、设计器、运行预览。 */
+/**
+ * 图纸相关页面。
+ *
+ * 图纸库与画面库、3D 预览同属「画布」视图，菜单入口统一在 `canvas` 插件；
+ * 设计器与运行预览是独立的全屏页面（不是画布的另一种视图），保留自己的路由。
+ */
 export const routes: RouteContribution[] = [
   {
     name: 'ui-canvas-gallery',
     path: '/ui-canvas/gallery',
-    component: () => import('./pages/UiDrawingGalleryPage.vue'),
+    redirect: (to) => ({ path: '/canvas', query: { ...to.query, tab: 'ui-canvas.gallery' } }),
     title: '图纸库',
     permission: 'scada:screen:list',
   },
@@ -28,14 +33,5 @@ export const routes: RouteContribution[] = [
   },
 ]
 
-export const menus: MenuContribution[] = [
-  {
-    id: 'ui-canvas-gallery',
-    title: '图纸库',
-    path: '/ui-canvas/gallery',
-    icon: 'Stamp',
-    group: '组态与画面',
-    order: 92,
-    permission: 'scada:screen:list',
-  },
-]
+/** 菜单入口在 `canvas` 插件，这里不再登记第二份。 */
+export const menus: MenuContribution[] = []

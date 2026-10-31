@@ -1,5 +1,8 @@
+import { defineAsyncComponent } from 'vue'
 import type { PluginDefinition } from '@/kernel'
-import { routes, menus } from './routes'
+import { menus, routes } from './routes'
+
+const UiDrawingGalleryPage = defineAsyncComponent(() => import('./pages/UiDrawingGalleryPage.vue'))
 
 /**
  * 图纸插件：2D 图纸 → 可运行页面。
@@ -19,6 +22,7 @@ export const uiCanvasPlugin: PluginDefinition = {
   setup(ctx) {
     for (const route of routes) ctx.routes.add(route)
     for (const menu of menus) ctx.menus.add(menu)
+    ctx.slots.add({ name: 'canvas:tab', id: 'ui-canvas.gallery', title: '图纸库', icon: 'Stamp', order: 30, component: UiDrawingGalleryPage })
     return () => ctx.logger.debug('ui-canvas plugin disposed')
   },
 }

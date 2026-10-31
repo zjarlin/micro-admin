@@ -16,6 +16,7 @@ export const pluginModules: Record<string, PluginModuleRef> = {
   dict: { file: '/src/plugins/dict', export: 'dictPlugin' },
   settings: { file: '/src/plugins/settings', export: 'settingsPlugin' },
   monitor: { file: '/src/plugins/monitor', export: 'monitorPlugin' },
+  canvas: { file: '/src/plugins/canvas', export: 'canvasPlugin' },
   scada: { file: '/src/plugins/scada', export: 'scadaPlugin' },
   'ui-canvas': { file: '/src/plugins/ui-canvas', export: 'uiCanvasPlugin' },
   pages: { file: '/src/plugins/pages', export: 'pagesPlugin' },

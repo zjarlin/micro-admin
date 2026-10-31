@@ -1,18 +1,18 @@
 <script setup lang="ts">
 // 图纸库：所有画过的 2D 图纸都在这里找得到。
 //
-// 版式与「画面库」一致（双栏：图标栏 + 筛选栏，主区九宫格一屏 3 × 3），
-// 但缩略图是**图纸线框**而不是渲染结果：设计师一眼看出这一页的结构，
-// 同时卡片上直接显示「编译错误 / 已发布」，点进去才需要看细节。
+// 缩略图是**图纸线框**而不是渲染结果：设计师一眼看出这一页的结构，同时卡片上直接显示
+// 「编译错误 / 已发布」，点进去才需要看细节。版式与画面库共用 `CanvasGallery` 壳
+// （左侧筛选 + 自适应九宫格），导航已归画布页签，这里不再自建 rail。
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Box, CirclePlus, Delete, Files, Grid, MagicStick, Refresh, Search, Stamp, View,
-} from '@element-plus/icons-vue'
+import { Box, CirclePlus, Delete, MagicStick, Refresh, View } from '@element-plus/icons-vue'
 import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
 import { createUiCanvasApi, type UiDrawingSummary, type UiWireframeItem } from '@/shared/ui-canvas/http'
+import CanvasGallery from '@/components/canvas/CanvasGallery.vue'
+import CanvasCard from '@/components/canvas/CanvasCard.vue'
 
 const router = useRouter()
 const api = createUiCanvasApi(useService<HttpClient>('http'))
@@ -38,12 +38,12 @@ const filtered = computed(() => {
   })
 })
 
-const stats = computed(() => ({
-  count: drawings.value.length,
-  elements: drawings.value.reduce((sum, drawing) => sum + drawing.elementCount, 0),
-  published: drawings.value.filter((drawing) => drawing.publishedKey).length,
-  broken: drawings.value.filter((drawing) => (thumbs.value[drawing.id]?.errorCount ?? 0) > 0).length,
-}))
+const stats = computed(() => [
+  { label: '图纸', value: drawings.value.length },
+  { label: '元素', value: drawings.value.reduce((sum, drawing) => sum + drawing.elementCount, 0) },
+  { label: '已发布', value: drawings.value.filter((drawing) => drawing.publishedKey).length },
+  { label: '有错误', value: drawings.value.filter((drawing) => (thumbs.value[drawing.id]?.errorCount ?? 0) > 0).length },
+])
 
 async function load(): Promise<void> {
   loading.value = true
@@ -134,170 +134,71 @@ function formatTime(value: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function statusOf(drawing: UiDrawingSummary): { text: string; tone: 'ok' | 'warn' } | undefined {
+  if (drawing.publishedKey) return { text: '已发布', tone: 'ok' }
+  const errors = thumbs.value[drawing.id]?.errorCount ?? 0
+  if (errors > 0) return { text: `${errors} 处错误`, tone: 'warn' }
+  return undefined
+}
+
 onMounted(load)
 </script>
 
 <template>
-  <div class="page drawing-gallery">
-    <header class="page-head">
-      <div class="crud-head">
-        <h1>图纸库</h1>
-        <span class="muted head-note">画完的 2D 图纸都在这里：改图纸即改页面，发布不需要发版</span>
-      </div>
-      <div class="page-actions">
-        <el-button :icon="CirclePlus" type="primary" :loading="creating" @click="create">新建图纸</el-button>
-        <el-button :icon="Refresh" @click="load">刷新</el-button>
-      </div>
-    </header>
+  <CanvasGallery
+    v-model:keyword="keyword"
+    placeholder="图纸名称 / 页面 key"
+    :stats="stats"
+    :loading="loading"
+    :min-card-width="240"
+    empty-text="还没有图纸。点「新建图纸」进设计器，把元素拖出来就是一张要上线的页面。"
+  >
+    <template #filters>
+      <span class="filter-label">状态</span>
+      <el-checkbox v-model="onlyPublished" label="只看已发布" size="small" />
+      <el-checkbox v-model="onlyBroken" label="只看有错误" size="small" />
+    </template>
 
-    <div class="gallery-layout">
-      <aside class="panel gallery-rail">
-        <button class="rail-item" type="button" @click="router.push({ name: 'scada-workbench' })">
-          <el-icon><Grid /></el-icon><span>组态</span>
-        </button>
-        <button class="rail-item" type="button" @click="router.push({ name: 'scada-gallery' })">
-          <el-icon><Files /></el-icon><span>画面库</span>
-        </button>
-        <button class="rail-item is-active" type="button">
-          <el-icon><Stamp /></el-icon><span>图纸库</span>
-        </button>
-        <button class="rail-item" type="button" disabled>
-          <el-icon><View /></el-icon><span>3D</span>
-        </button>
-      </aside>
+    <template #actions>
+      <el-button size="small" type="primary" :icon="CirclePlus" :loading="creating" @click="create">新建图纸</el-button>
+      <el-button size="small" :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+      <span class="muted">{{ filtered.length }} / {{ drawings.length }}</span>
+    </template>
 
-      <aside class="panel gallery-filter">
-        <div class="filter-block">
-          <span class="filter-label">筛选</span>
-          <el-input v-model="keyword" placeholder="图纸名称 / 页面 key" clearable :prefix-icon="Search" />
-        </div>
-        <div class="filter-block">
-          <span class="filter-label">状态</span>
-          <el-checkbox v-model="onlyPublished" label="只看已发布" />
-          <el-checkbox v-model="onlyBroken" label="只看有错误" />
-        </div>
-        <div class="filter-stats">
-          <div><span>图纸</span><strong>{{ stats.count }}</strong></div>
-          <div><span>元素</span><strong>{{ stats.elements }}</strong></div>
-          <div><span>已发布</span><strong>{{ stats.published }}</strong></div>
-          <div><span>有错误</span><strong>{{ stats.broken }}</strong></div>
-        </div>
-      </aside>
-
-      <section class="gallery-grid" :class="{ 'is-loading': loading }">
-        <article v-for="drawing in filtered" :key="drawing.id" class="gallery-card">
-          <button type="button" class="gallery-thumb" @click="openDesigner(drawing.id)">
-            <span v-if="!thumbs[drawing.id]" class="gallery-thumb__empty">生成中…</span>
-            <span v-else class="gallery-thumb__svg" v-html="thumbs[drawing.id]?.svg" />
-            <span class="gallery-thumb__badge">{{ drawing.elementCount }} 元素</span>
-            <span v-if="drawing.publishedKey" class="gallery-thumb__ok">已发布</span>
-            <span v-else-if="(thumbs[drawing.id]?.errorCount ?? 0) > 0" class="gallery-thumb__bad">
-              {{ thumbs[drawing.id]?.errorCount }} 处错误
-            </span>
-          </button>
-          <div class="gallery-meta">
-            <div class="gallery-meta__title">
-              <strong>{{ drawing.name }}</strong>
-              <span class="muted">v{{ drawing.version }}</span>
-            </div>
-            <p class="muted">{{ drawing.description || '未填写描述' }}</p>
-            <p class="muted key-line">
-              <el-icon><Stamp /></el-icon>
-              <code>{{ drawing.publishedKey ?? drawing.title ?? '未设置页面 key' }}</code>
-            </p>
-            <div class="gallery-meta__foot">
-              <span class="muted">{{ formatTime(drawing.updatedAt) }}</span>
-              <div class="gallery-actions">
-                <el-tooltip content="编译检查" placement="top">
-                  <el-button size="small" text :icon="MagicStick" @click="compileOnly(drawing)" />
-                </el-tooltip>
-                <el-tooltip content="打开设计器" placement="top">
-                  <el-button size="small" text :icon="View" @click="openDesigner(drawing.id)" />
-                </el-tooltip>
-                <el-tooltip content="运行预览" placement="top">
-                  <el-button size="small" text :icon="Box" @click="openRun(drawing.id)" />
-                </el-tooltip>
-                <el-tooltip content="删除" placement="top">
-                  <el-button size="small" text type="danger" :icon="Delete" @click="remove(drawing)" />
-                </el-tooltip>
-              </div>
-            </div>
-          </div>
-        </article>
-        <p v-if="!filtered.length && !loading" class="gallery-empty muted">
-          还没有图纸。点「新建图纸」进设计器，把元素拖出来就是一张要上线的页面。
-        </p>
-      </section>
-    </div>
-  </div>
+    <CanvasCard
+      v-for="drawing in filtered"
+      :key="drawing.id"
+      :title="drawing.name"
+      :badge="`v${drawing.version}`"
+      :description="drawing.description"
+      :svg="thumbs[drawing.id]?.svg"
+      :footnote="`${drawing.elementCount} 元素`"
+      :status="statusOf(drawing)"
+      :meta="formatTime(drawing.updatedAt)"
+      thumb-background="#eef2f7"
+      @open="openDesigner(drawing.id)"
+    >
+      <template #meta>
+        <code>{{ drawing.publishedKey ?? drawing.title ?? '未设置页面 key' }}</code>
+      </template>
+      <template #actions>
+        <el-tooltip content="编译检查" placement="top">
+          <el-button size="small" text :icon="MagicStick" @click="compileOnly(drawing)" />
+        </el-tooltip>
+        <el-tooltip content="打开设计器" placement="top">
+          <el-button size="small" text :icon="View" @click="openDesigner(drawing.id)" />
+        </el-tooltip>
+        <el-tooltip content="运行预览" placement="top">
+          <el-button size="small" text :icon="Box" @click="openRun(drawing.id)" />
+        </el-tooltip>
+        <el-tooltip content="删除" placement="top">
+          <el-button size="small" text type="danger" :icon="Delete" @click="remove(drawing)" />
+        </el-tooltip>
+      </template>
+    </CanvasCard>
+  </CanvasGallery>
 </template>
 
 <style scoped>
-.drawing-gallery { min-width: 0; }
-.head-note { font-size: 12px; }
-.gallery-layout { display: grid; grid-template-columns: 76px 210px minmax(0, 1fr); gap: 16px; align-items: start; }
-.gallery-rail { display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; }
-.rail-item {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 10px 4px; border-radius: 10px; border: 1px solid transparent;
-  background: transparent; color: var(--muted); font-size: 11px; cursor: pointer;
-}
-.rail-item:hover:not(:disabled) { background: rgba(99, 102, 241, .08); color: var(--app-text); }
-.rail-item.is-active { border-color: rgba(99, 102, 241, .45); background: rgba(99, 102, 241, .12); color: var(--app-text); }
-.rail-item:disabled { opacity: .4; cursor: not-allowed; }
-.gallery-filter { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
-.filter-block { display: flex; flex-direction: column; gap: 6px; }
 .filter-label { color: var(--muted); font-size: 12px; }
-.filter-stats { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
-.filter-stats div { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
-.filter-stats span { color: var(--muted); }
-.filter-stats strong { color: var(--app-text); font-size: 14px; }
-.gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(240px, 1fr)); gap: 16px; align-content: start; max-width: 1320px; }
-@media (max-width: 1400px) { .gallery-grid { grid-template-columns: repeat(2, minmax(240px, 1fr)); } }
-@media (max-width: 980px) { .gallery-grid { grid-template-columns: minmax(0, 1fr); } }
-.gallery-grid.is-loading { opacity: .6; }
-.gallery-card {
-  display: flex; flex-direction: column; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  transition: border-color .15s ease, transform .15s ease;
-}
-.gallery-card:hover { border-color: rgba(99, 102, 241, .5); transform: translateY(-2px); }
-.gallery-thumb {
-  position: relative; display: flex; align-items: center; justify-content: center;
-  padding: 0; border: 0; background: #eef2f7; aspect-ratio: 4 / 3; cursor: pointer; overflow: hidden;
-}
-.gallery-thumb__svg { display: block; width: 100%; height: 100%; }
-.gallery-thumb__svg :deep(svg) { width: 100%; height: 100%; display: block; }
-.gallery-thumb__empty { color: var(--muted); font-size: 12px; }
-.gallery-thumb__badge {
-  position: absolute; right: 8px; bottom: 8px; padding: 2px 8px; border-radius: 999px;
-  background: rgba(15, 23, 42, .78); color: #cbd5e1; font-size: 11px;
-}
-.gallery-thumb__ok {
-  position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 999px;
-  background: rgba(34, 197, 94, .2); border: 1px solid rgba(34, 197, 94, .55); color: #15803d; font-size: 11px;
-}
-.gallery-thumb__bad {
-  position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 999px;
-  background: rgba(248, 113, 113, .2); border: 1px solid rgba(248, 113, 113, .6); color: #b91c1c; font-size: 11px;
-}
-.gallery-meta { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 10px; }
-.gallery-meta__title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.gallery-meta__title strong { font-size: 14px; color: var(--app-text); }
-.gallery-meta p {
-  margin: 0; font-size: 12px; line-height: 1.6;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.key-line { display: flex; align-items: center; gap: 4px; }
-.key-line code { font-size: 11px; }
-.gallery-meta__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.gallery-meta__foot > .muted { white-space: nowrap; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-.gallery-actions { display: flex; align-items: center; gap: 0; }
-.gallery-empty { grid-column: 1 / -1; padding: 40px 0; text-align: center; }
-@media (max-width: 1280px) { .gallery-layout { grid-template-columns: 68px 190px minmax(0, 1fr); } }
-@media (max-width: 980px) {
-  .gallery-layout { grid-template-columns: 1fr; }
-  .gallery-rail { flex-direction: row; }
-  .rail-item { flex-direction: row; }
-}
 </style>

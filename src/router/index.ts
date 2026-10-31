@@ -27,17 +27,22 @@ export const router = createRouter({
  * 权限与插件启停放在守卫里判断，避免“登录后动态 addRoute”与导航重放互相等待。
  */
 export function compilePluginRoutes(instance: MicroKernel): RouteRecordRaw[] {
-  const children: RouteRecordRaw[] = instance.routeContributions().map((route) => ({
-    path: route.path.replace(/^\//, ''),
-    name: route.name,
-    component: route.component,
-    meta: {
-      title: route.title,
-      permission: route.permission,
-      pluginId: route.pluginId,
-      ...route.meta,
-    },
-  }))
+  const children: RouteRecordRaw[] = instance.routeContributions().map((route) => {
+    const base = {
+      path: route.path.replace(/^\//, ''),
+      name: route.name,
+      meta: {
+        title: route.title,
+        permission: route.permission,
+        pluginId: route.pluginId,
+        ...route.meta,
+      },
+    }
+    // 合并页面后旧地址用 redirect 保活：收藏与已打开的标签页不会掉到 404。
+    if (route.redirect) return { ...base, redirect: route.redirect }
+    if (!route.component) throw new Error(`route ${route.name} needs component or redirect`)
+    return { ...base, component: route.component }
+  })
   return [{ path: '/', component: Layout, redirect: '/dashboard', children }]
 }
 

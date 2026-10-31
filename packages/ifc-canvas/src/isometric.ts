@@ -3,9 +3,15 @@
 // 不引 three.js 也能看到「2D 画面立起来」的效果，服务端（缩略图、`/scada/ifc/preview`）
 // 与浏览器（预览页）共用同一段代码，因此不依赖 DOM、WebGL 或图片解码。
 //
-// 世界坐标 → 屏幕：标准等轴测，相机在 (+1,+1,+1) 方向
-//   screenX = (x - y) * cos(angle)
-//   screenY = (x + y) * sin(angle) - z
+// 世界坐标 → 屏幕：正交投影，相机绕 Z 轴转方位角、再抬仰角
+//   rx = (x * cos(azimuth) - y * sin(azimuth)) * √2
+//   ry = (x * sin(azimuth) + y * cos(azimuth)) * √2
+//   screenX = rx * cos(angle)
+//   screenY = ry * sin(angle) - z
+// 默认方位角 45°、仰角 30° 时 rx=(x-y)、ry=(x+y)，即经典等轴测（与旧版逐像素一致）。
+// 方位角可自由旋转（预览页拖动即绕 Z 轴轨道旋转），因此这是**真正的三维视角**，
+// 不是一张固定角度的斜投影假 3D；坐标系、地面网格与坐标轴都在同一套世界坐标里画。
+//
 // 面片按重心深度排序（远的先画），对凸多面体足够，且输出是纯 path，方便做缩略图。
 
 import type { ExtrusionPlan, PartRole, Point2 } from './types.ts'
@@ -26,8 +32,10 @@ export interface IsoPart {
 export interface IsoOptions {
   /** 屏幕像素 / 毫米。默认 0.18：1920mm 宽的画面约 400px。 */
   scale?: number
-  /** 等轴测角度（弧度），默认 30°。 */
+  /** 仰角（弧度），默认 30°。 */
   angle?: number
+  /** 绕 Z 轴的方位角（弧度），默认 45°（经典等轴测）。 */
+  azimuth?: number
   padding?: number
   background?: string | null
   /** 是否画图元名称，默认 true（只在有 label 时）。 */
@@ -35,6 +43,12 @@ export interface IsoOptions {
   /** 背景板颜色：立面模式默认画一块画布底板，让「这一页」在 3D 里立得起来。 */
   backdrop?: string | null
   stroke?: string
+  /** 地面网格：`true` 自动间距，数字表示毫米间距；默认关。 */
+  grid?: boolean | number
+  /** X / Y / Z 坐标轴与刻度（毫米）；默认关。 */
+  axes?: boolean
+  /** 地面板填充色；不传时随网格一起出现一块浅色地面。 */
+  ground?: string | null
 }
 
 const ROLE_COLORS: Record<PartRole, string> = {
@@ -46,6 +60,9 @@ const ROLE_COLORS: Record<PartRole, string> = {
   pipe: '#5b6a80',
   label: '#1f2937',
 }
+
+/** 坐标轴配色：CAD 惯例（X 红 / Y 绿 / Z 蓝）。 */
+const AXIS_COLORS = { x: '#f87171', y: '#4ade80', z: '#60a5fa' } as const
 
 function escapeXml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -82,6 +99,15 @@ function lift(hex: string): string {
     .join('')}`
 }
 
+/** 把任意间距收成 1 / 2 / 5 × 10ⁿ，刻度标签才是人读的数字。 */
+function niceStep(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 100
+  const power = 10 ** Math.floor(Math.log10(raw))
+  const normalized = raw / power
+  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10
+  return factor * power
+}
+
 interface Face {
   depth: number
   points: Array<[number, number]>
@@ -89,27 +115,87 @@ interface Face {
   stroke: string
 }
 
+interface Line {
+  depth: number
+  from: [number, number]
+  to: [number, number]
+  stroke: string
+  width: number
+  dash?: string | undefined
+}
+
+interface TextMark {
+  x: number
+  y: number
+  text: string
+  fill: string
+  size: number
+  anchor: 'start' | 'middle' | 'end'
+  outline: boolean
+}
+
+interface WorldBounds {
+  x0: number
+  x1: number
+  y0: number
+  y1: number
+  z0: number
+  z1: number
+}
+
+function worldBounds(parts: readonly IsoPart[]): WorldBounds | null {
+  let x0 = Infinity
+  let x1 = -Infinity
+  let y0 = Infinity
+  let y1 = -Infinity
+  let z0 = Infinity
+  let z1 = -Infinity
+  for (const part of parts) {
+    for (const [x, y, z] of [...part.base, ...part.top]) {
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+      if (z < z0) z0 = z
+      if (z > z1) z1 = z
+    }
+  }
+  return Number.isFinite(x0) ? { x0, x1, y0, y1, z0, z1 } : null
+}
+
 /**
  * 轴测渲染。
  *
- * 宽高按实际内容裁剪，输出可直接塞进 `<img>`/缩略图卡片，也可内联进页面。
+ * 宽高按实际内容裁剪（含地面网格与坐标轴），输出可直接塞进 `<img>`/缩略图卡片，
+ * 也可内联进页面。
  */
 export function renderIsometric(parts: IsoPart[], options: IsoOptions = {}): { svg: string; width: number; height: number } {
   const scale = options.scale ?? 0.18
   const angle = options.angle ?? Math.PI / 6
+  const azimuth = options.azimuth ?? Math.PI / 4
   const padding = options.padding ?? 16
   const stroke = options.stroke ?? 'rgba(15,23,42,0.55)'
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
+  const ca = Math.cos(azimuth)
+  const sa = Math.sin(azimuth)
+  // 方位角 45° 时把 (x∓y)/√2 还原成 (x∓y)：默认视角与旧版等轴测逐像素一致。
+  const K = Math.SQRT2
 
-  const project = (x: number, y: number, z: number): [number, number] => [
-    (x - y) * cos * scale,
-    ((x + y) * sin - z) * scale,
-  ]
-  const depthOf = ([x, y, z]: Point3): number => x + y + z
+  const project = (x: number, y: number, z: number): [number, number] => {
+    const rx = (x * ca - y * sa) * K
+    const ry = (x * sa + y * ca) * K
+    return [rx * cos * scale, (ry * sin - z) * scale]
+  }
+  const depthOf = ([x, y, z]: Point3): number => x * sa + y * ca + z
 
   const faces: Face[] = []
-  const labels: Array<{ x: number; y: number; text: string }> = []
+  const labels: TextMark[] = []
+  /** 地面/网格/坐标轴：先画地面与网格（会被模型遮住），坐标轴最后画（永远可见）。 */
+  const groundLayer: Line[] = []
+  const groundFills: Array<{ points: Array<[number, number]>; fill: string }> = []
+  const axisLayer: Line[] = []
+  const axisText: TextMark[] = []
 
   for (const part of parts) {
     if (part.base.length < 3 || part.base.length !== part.top.length) continue
@@ -144,50 +230,166 @@ export function renderIsometric(parts: IsoPart[], options: IsoOptions = {}): { s
     faces.push({ depth: topDepth, points: top, fill: shade(color, 0.26), stroke })
 
     if (options.labels !== false && part.label) {
-      const centre = part.base.reduce<[number, number, number]>(
+      const centre = part.base.reduce<Point3>(
         (acc, [x, y, z]) => [acc[0] + x / part.base.length, acc[1] + y / part.base.length, acc[2] + z / part.base.length],
         [0, 0, 0],
       )
       const anchor = project(centre[0], centre[1], centre[2])
-      labels.push({ x: anchor[0], y: anchor[1] - 8, text: part.label })
+      labels.push({
+        x: anchor[0],
+        y: anchor[1] - 8,
+        text: part.label,
+        fill: '#e2e8f0',
+        size: 9,
+        anchor: 'middle',
+        outline: true,
+      })
+    }
+  }
+
+  const bounds = worldBounds(parts)
+
+  // 地面 + 网格：铺在世界 Z 最低处（立面模式是墙脚，铺地模式是画面所在平面）。
+  if (bounds && (options.grid || options.ground)) {
+    const spanX = Math.max(bounds.x1 - bounds.x0, 1)
+    const spanY = Math.max(bounds.y1 - bounds.y0, 1)
+    const margin = Math.max(Math.max(spanX, spanY) * 0.12, 120)
+    const floor = bounds.z0
+    const gx0 = bounds.x0 - margin
+    const gx1 = bounds.x1 + margin
+    const gy0 = bounds.y0 - margin
+    const gy1 = bounds.y1 + margin
+    groundFills.push({
+      points: [
+        project(gx0, gy0, floor),
+        project(gx1, gy0, floor),
+        project(gx1, gy1, floor),
+        project(gx0, gy1, floor),
+      ],
+      fill: options.ground ?? 'rgba(15, 23, 42, 0.55)',
+    })
+    const step = typeof options.grid === 'number' && options.grid > 0
+      ? options.grid
+      : niceStep(Math.max(spanX, spanY) / 8)
+    const gridStroke = 'rgba(148, 163, 184, 0.22)'
+    for (let x = Math.ceil(gx0 / step) * step; x <= gx1; x += step) {
+      groundLayer.push({ depth: 0, from: project(x, gy0, floor), to: project(x, gy1, floor), stroke: gridStroke, width: 0.5 })
+    }
+    for (let y = Math.ceil(gy0 / step) * step; y <= gy1; y += step) {
+      groundLayer.push({ depth: 0, from: project(gx0, y, floor), to: project(gx1, y, floor), stroke: gridStroke, width: 0.5 })
+    }
+  }
+
+  // 坐标轴：原点在世界 (0,0,地面)，长度取模型包围盒；每轴 4 段刻度并标毫米数。
+  if (options.axes && bounds) {
+    const floor = bounds.z0
+    // 立面模式下模型在 -Y 侧（离墙距离），Y 轴朝 -Y 画才不会被墙挡住。
+    const yDir = bounds.y1 > 0 ? 1 : -1
+    const spans: Array<{ key: 'x' | 'y' | 'z'; to: Point3; length: number }> = [
+      { key: 'x', to: [bounds.x1, 0, floor], length: bounds.x1 },
+      { key: 'y', to: [0, yDir * Math.max(Math.abs(bounds.y0), Math.abs(bounds.y1)), floor], length: Math.max(Math.abs(bounds.y0), Math.abs(bounds.y1)) },
+      { key: 'z', to: [0, 0, bounds.z1], length: bounds.z1 },
+    ]
+    for (const axis of spans) {
+      if (axis.length <= 0) continue
+      const color = AXIS_COLORS[axis.key]
+      const origin = project(0, 0, floor)
+      const tip = project(axis.to[0], axis.to[1], axis.to[2])
+      axisLayer.push({ depth: 0, from: origin, to: tip, stroke: color, width: 1.2 })
+      axisText.push({
+        x: tip[0] + (axis.key === 'z' ? 4 : 3),
+        y: tip[1] + (axis.key === 'z' ? 0 : 3),
+        text: axis.key.toUpperCase(),
+        fill: color,
+        size: 11,
+        anchor: 'start',
+        outline: false,
+      })
+      const tickStep = niceStep(axis.length / 4)
+      for (let value = tickStep; value < axis.length; value += tickStep) {
+        const ratio = value / axis.length
+        const point = project(axis.to[0] * ratio, axis.to[1] * ratio, floor + (axis.to[2] - floor) * ratio)
+        // 刻度短线：朝屏幕外侧偏 4px，避免与模型/网格糊在一起。
+        axisLayer.push({
+          depth: 0,
+          from: point,
+          to: [point[0] - 4, point[1] + 3],
+          stroke: color,
+          width: 0.9,
+        })
+        axisText.push({
+          x: point[0] - 5,
+          y: point[1] + 4,
+          text: `${Math.round(value)}`,
+          fill: color,
+          size: 8,
+          anchor: 'end',
+          outline: false,
+        })
+      }
     }
   }
 
   faces.sort((left, right) => left.depth - right.depth)
 
+  const collect: Array<[number, number]> = []
+  for (const face of faces) collect.push(...face.points)
+  for (const fill of groundFills) collect.push(...fill.points)
+  for (const line of [...groundLayer, ...axisLayer]) collect.push(line.from, line.to)
+
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
   let maxY = -Infinity
-  for (const face of faces) {
-    for (const [x, y] of face.points) {
-      if (x < minX) minX = x
-      if (y < minY) minY = y
-      if (x > maxX) maxX = x
-      if (y > maxY) maxY = y
-    }
+  for (const [x, y] of collect) {
+    if (x < minX) minX = x
+    if (y < minY) minY = y
+    if (x > maxX) maxX = x
+    if (y > maxY) maxY = y
   }
   if (!Number.isFinite(minX)) return { svg: emptySvg(options.background ?? null, padding), width: padding * 2, height: padding * 2 }
 
-  const width = Math.max(maxX - minX + padding * 2, 40)
-  const height = Math.max(maxY - minY + padding * 2, 40)
+  // 轴标签画在端点外侧，包围盒留出一点余量，否则最右/最下的字符会被裁掉；
+  // 不开坐标轴时不留余量，输出与旧版逐像素一致。
+  const slack = options.axes ? 16 : 0
+  const width = Math.max(maxX - minX + padding * 2 + slack, 40)
+  const height = Math.max(maxY - minY + padding * 2 + slack / 2, 40)
   const shift = { x: padding - minX, y: padding - minY }
+  const at = (x: number, y: number): [number, number] => [round(x + shift.x), round(y + shift.y)]
 
   const body: string[] = []
   if (options.background) {
     body.push(`<rect x="0" y="0" width="${round(width)}" height="${round(height)}" fill="${escapeXml(options.background)}"/>`)
   }
+  for (const fill of groundFills) {
+    const path = fill.points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${at(x, y).join(' ')}`).join(' ')
+    body.push(`<path d="${path} Z" fill="${escapeXml(fill.fill)}"/>`)
+  }
+  for (const line of groundLayer) {
+    const [x1, y1] = at(line.from[0], line.from[1])
+    const [x2, y2] = at(line.to[0], line.to[1])
+    body.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${line.stroke}" stroke-width="${line.width}"/>`)
+  }
   for (const face of faces) {
     const path = face.points
-      .map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${round(x + shift.x)} ${round(y + shift.y)}`)
+      .map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${at(x, y).join(' ')}`)
       .join(' ')
     body.push(`<path d="${path} Z" fill="${face.fill}" stroke="${face.stroke}" stroke-width="0.5" stroke-linejoin="round"/>`)
   }
-  for (const item of labels) {
+  for (const line of axisLayer) {
+    const [x1, y1] = at(line.from[0], line.from[1])
+    const [x2, y2] = at(line.to[0], line.to[1])
+    body.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${line.stroke}" stroke-width="${line.width}" stroke-linecap="round"/>`)
+  }
+  for (const item of [...labels, ...axisText]) {
+    const [x, y] = at(item.x, item.y)
+    const outline = item.outline
+      ? ' stroke="#0b1220" stroke-width="2.4" paint-order="stroke"'
+      : ''
     body.push(
-      `<text x="${round(item.x + shift.x)}" y="${round(item.y + shift.y)}" fill="#e2e8f0" stroke="#0b1220" ` +
-        `stroke-width="2.4" paint-order="stroke" font-family="Noto Sans SC, Microsoft YaHei, sans-serif" ` +
-        `font-size="9" text-anchor="middle">${escapeXml(item.text)}</text>`,
+      `<text x="${x}" y="${y}" fill="${item.fill}"${outline} ` +
+        `font-family="Noto Sans SC, Microsoft YaHei, sans-serif" font-size="${item.size}" ` +
+        `text-anchor="${item.anchor}">${escapeXml(item.text)}</text>`,
     )
   }
 
@@ -271,6 +473,9 @@ export function renderPlanIsometricFit(
     padding: 0,
     backdrop: null,
     background: null,
+    grid: false,
+    axes: false,
+    ground: null,
   })
   if (!measured.width || !measured.height) {
     return renderPlanIsometric(plan, { ...options, backdrop: null })

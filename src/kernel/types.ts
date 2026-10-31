@@ -23,7 +23,14 @@ export interface MenuContribution extends ContributionOwner {
 export interface RouteContribution extends ContributionOwner {
   name: string
   path: string
-  component: () => Promise<Component | { default: Component }>
+  component?: () => Promise<Component | { default: Component }>
+  /**
+   * 旧地址兼容：合并页面后把老路由指向新地址，避免收藏/标签页失效。
+   *
+   * 函数形式可以带上原查询串（例如 `/scada/preview?screenId=1` → `/canvas?tab=preview&screenId=1`），
+   * 否则「带参数的深链接」一跳转就丢上下文。
+   */
+  redirect?: RouteRecordRaw['redirect']
   title?: string
   permission?: string
   meta?: Record<string, unknown>
@@ -36,6 +43,14 @@ export interface SlotContribution extends ContributionOwner {
   component: Component
   order?: number
   permission?: string
+  /**
+   * 槽位自带标题/图标：供「页签型槽位」（例如 `canvas:tab`）渲染成一条页签。
+   *
+   * 普通槽位（`scada:assistant` 之类）不写，槽位宿主也不关心这两个字段；
+   * 它们是声明的一部分，而不是让外壳再维护一张「谁在哪个槽位里叫什么」的对照表。
+   */
+  title?: string
+  icon?: string
 }
 
 export interface WidgetContribution extends ContributionOwner {
