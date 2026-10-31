@@ -1,21 +1,29 @@
 <script setup lang="ts">
-// 图纸设计器：左边双栏菜单（角色库 + 结构树），中间画布，右边属性 / 绑定 / 编译结果，底部实时预览。
+// 图纸设计器：IDE / CAD 式布局——一条 40px 工具条 + 画布吃掉剩余全部空间。
 //
-// 「实时」体现在两处：
-// 1. 画布上的几何改动即时反映到右侧编译结果与底部运行预览（同一次编译，不重复求值）；
-// 2. vibeelement 的模板片段在面板里就地渲染，改一个字就能看到元素长什么样。
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+// 空间分配的优先级（越靠上越重要）：
+// 1. 画布：无限画布 + 缩放/平移，只有它铺满视口；
+// 2. 左栏：元素库与结构树合并成单列，可整体收起（收起点图标轨道只剩 36px）；
+// 3. 其余一切（页面设置、元素属性、数据与事件、vibeelement、编译结果）都是**弹窗**，
+//    用的时候出现、不用的时候不占一个像素。
+//
+// 「所见即所得」体现在画布本身：元素不是线框占位，而是运行期同一批组件
+// （CrudQueryField / CrudFormField / CellValue / VibeElement / el-button），
+// 编译产物 `analysis.fragments` 把「图纸元素」映射到「schema 片段」，两边同源。
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowLeft, Delete, DocumentAdd, Link, MagicStick, Promotion, Refresh, SortDown, SortUp, Stamp, View,
+  ArrowLeft, Delete, DocumentAdd, FullScreen, Link, MagicStick, MoreFilled, Promotion,
+  Setting, SortDown, SortUp, Stamp, View, ZoomIn, ZoomOut,
 } from '@element-plus/icons-vue'
 import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
 import {
   ROLE_LIST, channelsOf, createEmptyDrawing, defaultCodeOf, effectiveProps, isContainer,
   findElement, inspectCode, regionsOf, specOf, validateBindings, vibeSchemaOf,
-  type UiDiagnostic, type UiDrawing, type UiElement, type UiElementProps, type UiQuestion, type UiRect, type UiRole,
+  type UiDiagnostic, type UiDrawing, type UiElement, type UiElementFragment, type UiElementProps,
+  type UiQuestion, type UiRect, type UiRole,
 } from '@/shared/ui-canvas'
 import type { UiCompileResponse } from '@/shared/ui-canvas/http'
 import { createUiCanvasApi, parseDrawing } from '@/shared/ui-canvas/http'
@@ -34,7 +42,7 @@ const name = ref('')
 const description = ref('')
 const savedVersion = ref(0)
 const selectedIds = ref<string[]>([])
-const zoom = ref(0.62)
+const zoom = ref(1)
 const snap = ref(true)
 const showRegions = ref(false)
 const saving = ref(false)
@@ -43,8 +51,16 @@ const asking = ref(false)
 const loading = ref(false)
 const compileResult = ref<UiCompileResponse | null>(null)
 const dirty = ref(false)
-/** 属性面板页签：属性 / 数据 / 事件 / 模板。 */
+/** 检查器弹窗页签：属性 / 数据与事件 / vibeelement / 编译。 */
 const inspectorTab = ref('props')
+/** 检查器弹窗是否打开；`meta` 页签在没有选中元素时显示页面设置。 */
+const inspectorOpen = ref(false)
+/** 左栏是否展开（收起后只剩 36px 图标轨道）。 */
+const railOpen = ref(true)
+/** 左栏页签：元素库 / 结构树。 */
+const railTab = ref<'palette' | 'tree'>('palette')
+/** 画布滚动宿主：缩放与平移都作用在它上面。 */
+const canvasViewport = ref<HTMLElement | null>(null)
 
 const selected = computed<UiElement | null>(() => {
   if (selectedIds.value.length !== 1) return null
@@ -148,6 +164,14 @@ watch(() => drawing.value, () => {
 
 function markDirty(): void {
   dirty.value = true
+}
+
+/** 工具条「更多」的二级动作：页面设置 / 运行预览 / 编译 / 下线。 */
+function onMore(command: string): void {
+  if (command === 'settings') openInspector('props')
+  else if (command === 'run') openRun()
+  else if (command === 'compile') openInspector('compile')
+  else if (command === 'unpublish') void unpublish()
 }
 
 // ---------------- 画布交互 ----------------
@@ -430,6 +454,119 @@ async function sendToGroup(role: UiRole): Promise<void> {
   addRole(role, { x: 60, y: 200 + drawing.value.elements.length * 8 })
 }
 
+// ---------------- 检查器弹窗 ----------------
+
+/** 打开检查器：不带元素就是页面设置，带元素就是该元素的属性。 */
+function openInspector(tab: 'props' | 'bindings' | 'vibe' | 'compile' = 'props', elementId?: string): void {
+  if (elementId) selectedIds.value = [elementId]
+  inspectorTab.value = tab
+  inspectorOpen.value = true
+}
+
+/** 弹窗标题：选中一个元素时显示角色与 id，否则是页面级设置。 */
+const inspectorTitle = computed(() => (selected.value
+  ? `${selectedSpec.value?.label ?? '元素'} · ${selected.value.id}`
+  : `页面设置 · ${drawing.value.meta.key || '未命名'}`))
+
+/** 画布双击元素 → 直接进属性页。 */
+function openElement(elementId: string): void {
+  openInspector('props', elementId)
+}
+
+// ---------------- 缩放 / 平移（CAD 手感） ----------------
+
+const ZOOM_MIN = 0.1
+const ZOOM_MAX = 3
+
+function applyZoom(next: number): void {
+  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(next * 100) / 100))
+  const viewport = canvasViewport.value
+  if (viewport && clamped !== zoom.value) {
+    // 以视口中心为锚点缩放：鼠标位置不变，缩放才不像「跳一下」。
+    const ratio = clamped / zoom.value
+    const centerX = viewport.scrollLeft + viewport.clientWidth / 2
+    const centerY = viewport.scrollTop + viewport.clientHeight / 2
+    zoom.value = clamped
+    void nextTick(() => {
+      viewport.scrollLeft = centerX * ratio - viewport.clientWidth / 2
+      viewport.scrollTop = centerY * ratio - viewport.clientHeight / 2
+    })
+    return
+  }
+  zoom.value = clamped
+}
+
+function zoomIn(): void {
+  applyZoom(zoom.value * 1.2)
+}
+
+function zoomOut(): void {
+  applyZoom(zoom.value / 1.2)
+}
+
+/** 适配窗口：把整张图纸塞进当前视口，缩放上限 100%（放太大反而看不清结构）。 */
+function zoomFit(): void {
+  const viewport = canvasViewport.value
+  if (!viewport) return
+  const padding = 32
+  const fit = Math.min(
+    (viewport.clientWidth - padding) / drawing.value.canvas.width,
+    (viewport.clientHeight - padding) / drawing.value.canvas.height,
+  )
+  applyZoom(Math.min(1, Math.max(ZOOM_MIN, fit)))
+}
+
+/** Ctrl/⌘ + 滚轮缩放；普通滚轮照常滚动（与浏览器/IDE 一致）。 */
+function onWheel(event: WheelEvent): void {
+  if (!event.ctrlKey && !event.metaKey) return
+  event.preventDefault()
+  applyZoom(zoom.value * (event.deltaY < 0 ? 1.1 : 1 / 1.1))
+}
+
+/**
+ * 平移画布：中键，或按住 Alt 拖左键（与 CAD / Figma 同一套手感）。
+ *
+ * 用 capture 阶段接管：否则画布里的选择/框选会先吃掉这次按下，
+ * 变成「想平移却拖动了元素」。
+ */
+let pan: { x: number; y: number; left: number; top: number } | null = null
+const panning = ref(false)
+
+function onViewportPointerDown(event: PointerEvent): void {
+  const viaMiddle = event.button === 1
+  const viaAlt = event.button === 0 && event.altKey
+  if (!viaMiddle && !viaAlt) return
+  const viewport = canvasViewport.value
+  if (!viewport) return
+  event.preventDefault()
+  event.stopPropagation()
+  pan = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop }
+  panning.value = true
+  viewport.setPointerCapture(event.pointerId)
+}
+
+function onViewportPointerMove(event: PointerEvent): void {
+  if (!pan) return
+  const viewport = canvasViewport.value
+  if (!viewport) return
+  viewport.scrollLeft = pan.left - (event.clientX - pan.x)
+  viewport.scrollTop = pan.top - (event.clientY - pan.y)
+}
+
+function onViewportPointerUp(): void {
+  pan = null
+  panning.value = false
+}
+
+// ---------------- 编译片段：画布上的真实组件 ----------------
+
+/** 元素 id → 编译片段；没有片段的元素按角色兜底渲染。 */
+const fragments = computed<UiElementFragment[]>(() => compileResult.value?.analysis.fragments ?? [])
+
+/** 状态栏：画布尺寸、元素数、选中数、缩放。 */
+const canvasSize = computed(() => `${drawing.value.canvas.width} × ${drawing.value.canvas.height}`)
+const unsupportedCount = computed(() => fragments.value.filter((item) => item.kind === 'unsupported').length)
+
 onMounted(load)
 onBeforeUnmount(() => {
   if (recompileTimer !== null) window.clearTimeout(recompileTimer)
@@ -437,529 +574,724 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page ui-designer" v-loading="loading">
-    <header class="page-head">
-      <div class="crud-head">
-        <el-button text :icon="ArrowLeft" @click="router.push({ name: 'ui-canvas-gallery' })">图纸库</el-button>
-        <h1>{{ name || '未命名图纸' }}</h1>
-        <el-tag v-if="dirty" size="small" type="warning">未保存</el-tag>
-        <el-tag v-else size="small" type="info">v{{ savedVersion }}</el-tag>
-        <el-tag v-if="errors.length" size="small" type="danger">{{ errors.length }} 处错误</el-tag>
-      </div>
-      <div class="page-actions">
-        <el-button :icon="View" @click="openRun">运行预览</el-button>
-        <el-button :icon="MagicStick" :loading="asking" @click="askAi">
-          问模型补参{{ questions.length ? `（${questions.length}）` : '' }}
-        </el-button>
-        <el-button :icon="Refresh" :loading="saving" @click="save">保存</el-button>
-        <el-button :icon="Stamp" type="primary" :loading="publishing" @click="publish">发布页面</el-button>
-        <el-button v-if="compileResult?.key" text type="danger" @click="unpublish">下线</el-button>
-      </div>
-    </header>
+  <div class="ui-designer" v-loading="loading">
+    <!-- ① 唯一一条工具条：返回 / 标题 / 状态 / 动作。没有页头、没有面包屑、没有大标题行。 -->
+    <div class="dz-bar">
+      <el-tooltip content="返回图纸库" placement="bottom" :show-after="400">
+        <button class="dz-icon" type="button" @click="router.push({ name: 'ui-canvas-gallery' })">
+          <el-icon :size="15"><ArrowLeft /></el-icon>
+        </button>
+      </el-tooltip>
+      <button class="dz-title" type="button" :title="`${name || '未命名图纸'} · 点击编辑页面设置`" @click="openInspector('props')">
+        <strong>{{ name || '未命名图纸' }}</strong>
+        <span class="dz-title__meta">
+          <em :class="{ 'is-dirty': dirty }">{{ dirty ? '未保存' : `v${savedVersion}` }}</em>
+          <em v-if="errors.length" class="is-error">{{ errors.length }} 处错误</em>
+          <em v-else-if="unsupportedCount" class="is-warn">{{ unsupportedCount }} 处待扩展</em>
+        </span>
+      </button>
 
-    <div class="designer-layout">
-      <!-- 左：双栏菜单（角色库 + 结构树） -->
-      <aside class="panel designer-menu">
-        <div class="menu-column menu-column--roles">
-          <div class="menu-title">元素</div>
-          <div class="role-groups">
-            <div v-for="layer in ['container', 'leaf', 'band'] as const" :key="layer" class="role-group">
-              <span class="role-group__label">
-                {{ layer === 'container' ? '容器' : layer === 'leaf' ? '数据元素' : '装饰' }}
-              </span>
-              <button
-                v-for="spec in ROLE_LIST.filter((item) => item.layer === layer)"
-                :key="spec.role"
-                class="role-chip"
-                type="button"
-                :style="{ borderColor: spec.tint }"
-                :title="`${spec.label}：${spec.description}`"
-                :disabled="!(layer === 'container' || drawing.meta.endpoint)"
-                draggable="true"
-                @click="sendToGroup(spec.role)"
-                @dragstart="($event.dataTransfer?.setData('application/x-ui-role', spec.role))"
-              >
-                <span class="role-chip__dot" :style="{ background: spec.tint }" />
-                {{ spec.label }}
-              </button>
-            </div>
+      <span class="dz-divider" />
+
+      <el-tooltip content="运行预览：用当前图纸编译出的 schema 渲染真实页面" placement="bottom" :show-after="400">
+        <button class="dz-icon" type="button" @click="openRun"><el-icon :size="15"><View /></el-icon></button>
+      </el-tooltip>
+      <el-tooltip content="问模型补参：只为缺失字段追问，不整份图纸回传" placement="bottom" :show-after="400">
+        <button class="dz-icon" type="button" :disabled="asking" @click="askAi">
+          <el-icon :size="15" :class="{ 'is-spin': asking }"><MagicStick /></el-icon>
+          <span v-if="questions.length" class="dz-badge">{{ questions.length }}</span>
+        </button>
+      </el-tooltip>
+      <el-tooltip content="编译检查与诊断" placement="bottom" :show-after="400">
+        <button class="dz-icon" type="button" @click="openInspector('compile')">
+          <el-icon :size="15"><Setting /></el-icon>
+          <span v-if="diagnostics.length" class="dz-badge" :class="{ 'is-danger': errors.length }">{{ diagnostics.length }}</span>
+        </button>
+      </el-tooltip>
+
+      <span class="dz-spacer" />
+
+      <!-- 画布控制：缩放/适配，居中偏右，和 CAD 一样不打断视线。 -->
+      <div class="dz-zoom">
+        <button class="dz-icon dz-icon--sm" type="button" title="缩小（Ctrl/⌘ + 滚轮）" @click="zoomOut">
+          <el-icon :size="13"><ZoomOut /></el-icon>
+        </button>
+        <button class="dz-zoom__value" type="button" title="适配窗口" @click="zoomFit">{{ Math.round(zoom * 100) }}%</button>
+        <button class="dz-icon dz-icon--sm" type="button" title="放大（Ctrl/⌘ + 滚轮）" @click="zoomIn">
+          <el-icon :size="13"><ZoomIn /></el-icon>
+        </button>
+      </div>
+      <el-tooltip content="画布铺满视口（隐藏左栏）" placement="bottom" :show-after="400">
+        <button class="dz-icon" type="button" :class="{ 'is-on': !railOpen }" @click="railOpen = !railOpen">
+          <el-icon :size="15"><FullScreen /></el-icon>
+        </button>
+      </el-tooltip>
+
+      <span class="dz-divider" />
+
+      <button class="dz-btn" type="button" :disabled="saving" @click="save">保存</button>
+      <button class="dz-btn dz-btn--primary" type="button" :disabled="publishing" @click="publish">发布</button>
+      <el-dropdown trigger="click" @command="onMore">
+        <button class="dz-icon" type="button" title="更多"><el-icon :size="15"><MoreFilled /></el-icon></button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="settings" :icon="Setting">页面设置</el-dropdown-item>
+            <el-dropdown-item command="run" :icon="View">运行预览</el-dropdown-item>
+            <el-dropdown-item command="compile" :icon="Stamp">编译结果</el-dropdown-item>
+            <el-dropdown-item v-if="compileResult?.key" command="unpublish" divided :icon="Delete">下线页面</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
+
+    <!-- ② 画布区：左图标轨道 + 画布，剩余空间全部归画布。 -->
+    <div class="dz-body">
+      <aside v-show="railOpen" class="dz-rail">
+        <div class="dz-rail__tabs">
+          <button
+            class="dz-rail__tab" type="button" :class="{ 'is-active': railTab === 'palette' }"
+            title="元素库：点一下加到画布，或拖到指定位置" @click="railTab = 'palette'"
+          >
+            <el-icon :size="14"><DocumentAdd /></el-icon>
+          </button>
+          <button
+            class="dz-rail__tab" type="button" :class="{ 'is-active': railTab === 'tree' }"
+            :title="`结构树（${drawing.elements.length} 元素）`" @click="railTab = 'tree'"
+          >
+            <el-icon :size="14"><SortUp /></el-icon>
+          </button>
+        </div>
+
+        <div v-show="railTab === 'palette'" class="dz-rail__body">
+          <div v-for="layer in ['container', 'leaf', 'band'] as const" :key="layer" class="dz-group">
+            <p class="dz-group__label">{{ layer === 'container' ? '容器' : layer === 'leaf' ? '数据' : '装饰' }}</p>
+            <button
+              v-for="spec in ROLE_LIST.filter((item) => item.layer === layer)"
+              :key="spec.role"
+              class="dz-role"
+              type="button"
+              :title="`${spec.label}：${spec.description}`"
+              :disabled="!(layer === 'container' || drawing.meta.endpoint)"
+              draggable="true"
+              @click="sendToGroup(spec.role)"
+              @dragstart="($event.dataTransfer?.setData('application/x-ui-role', spec.role))"
+            >
+              <span class="dz-role__dot" :style="{ background: spec.tint }" />
+              <span class="dz-role__text">{{ spec.label }}</span>
+            </button>
           </div>
         </div>
 
-        <div class="menu-column menu-column--tree">
-          <div class="menu-title">
-            结构
-            <span class="muted">{{ drawing.elements.length }} 元素</span>
+        <div v-show="railTab === 'tree'" class="dz-rail__body">
+          <div v-for="group in elementTree" :key="group.label" class="dz-group">
+            <p class="dz-group__label">{{ group.label }}</p>
+            <button
+              v-for="element in group.elements"
+              :key="element.id"
+              type="button"
+              class="dz-node"
+              :class="{ 'is-active': selectedIds.includes(element.id) }"
+              :title="`${element.id} · 双击打开属性`"
+              @click="selectedIds = [element.id]"
+              @dblclick="openElement(element.id)"
+            >
+              <span class="dz-role__dot" :style="{ background: specOf(element.role).tint }" />
+              <span class="dz-node__text">{{ effectiveProps(element).label ?? element.text ?? specOf(element.role).label }}</span>
+              <span class="dz-node__role">{{ specOf(element.role).label }}</span>
+            </button>
           </div>
-          <el-scrollbar class="tree-scroll">
-            <div v-for="group in elementTree" :key="group.label" class="tree-group">
-              <div class="tree-group__label">{{ group.label }}</div>
-              <button
-                v-for="element in group.elements"
-                :key="element.id"
-                type="button"
-                class="tree-row"
-                :class="{ 'is-active': selectedIds.includes(element.id) }"
-                @click="selectedIds = [element.id]"
-              >
-                <span class="tree-row__dot" :style="{ background: specOf(element.role).tint }" />
-                <span class="tree-row__text">
-                  {{ effectiveProps(element).label ?? element.text ?? specOf(element.role).label }}
-                </span>
-                <span class="tree-row__role">{{ specOf(element.role).label }}</span>
-              </button>
-            </div>
-            <p v-if="!drawing.elements.length" class="muted empty-hint">从左边点一个元素开始画。</p>
-          </el-scrollbar>
+          <p v-if="!drawing.elements.length" class="dz-empty">从元素库点一个开始画。</p>
         </div>
       </aside>
 
-      <!-- 中：画布 -->
-      <section class="panel designer-canvas">
-        <div class="canvas-toolbar">
-          <el-button-group>
-            <el-button size="small" :icon="DocumentAdd" @click="duplicateSelected" :disabled="!selected">复制</el-button>
-            <el-button size="small" :icon="SortUp" @click="bringForward" :disabled="!selected">上移</el-button>
-            <el-button size="small" :icon="SortDown" @click="sendBackward" :disabled="!selected">下移</el-button>
-            <el-button size="small" :icon="Delete" type="danger" @click="removeSelected" :disabled="!selectedIds.length">删除</el-button>
-          </el-button-group>
-          <el-checkbox v-model="snap" label="吸附" />
-          <el-checkbox v-model="showRegions" label="区域线" />
-          <el-slider v-model="zoom" :min="0.2" :max="1.4" :step="0.02" style="width: 140px" />
-          <span class="muted">{{ Math.round(zoom * 100) }}%</span>
-          <span class="muted">{{ drawing.canvas.width }} × {{ drawing.canvas.height }}</span>
-        </div>
-        <el-scrollbar class="canvas-scroll">
+      <!-- 画布：滚轮平移，Ctrl/⌘+滚轮缩放，Alt/中键拖拽平移 -->
+      <div
+        ref="canvasViewport"
+        class="dz-viewport"
+        :class="{ 'is-panning': panning }"
+        @wheel="onWheel"
+        @pointerdown.capture="onViewportPointerDown"
+        @pointermove="onViewportPointerMove"
+        @pointerup="onViewportPointerUp"
+        @pointercancel="onViewportPointerUp"
+      >
+        <div class="dz-canvas">
           <DrawingCanvas
             :drawing="drawing"
             :selected-ids="selectedIds"
             :zoom="zoom"
             :snap="snap"
             :show-regions="showRegions"
+            :fragments="fragments"
+            :entity="drawing.meta.entity"
             @update:selected-ids="selectedIds = $event"
             @update="onElementRect"
             @drop-role="addRole"
+            @open="openElement"
           />
-        </el-scrollbar>
-      </section>
+        </div>
+      </div>
+    </div>
 
-      <!-- 右：属性 / 绑定 / 编译结果 -->
-      <aside class="panel designer-inspector">
-        <el-tabs v-model="inspectorTab" class="inspector-tabs">
-          <el-tab-pane label="属性" name="props">
-            <template v-if="!selected">
-              <p class="muted empty-hint">选中一个元素后在这里配置；多选时只显示数量（{{ selectedIds.length }}）。</p>
-              <el-divider />
-              <div class="form-block">
-                <span class="form-label">页面 key</span>
-                <el-input :model-value="drawing.meta.key" @update:model-value="setMeta('key', $event)" placeholder="system.user" />
-              </div>
-              <div class="form-block">
-                <span class="form-label">页面标题</span>
-                <el-input :model-value="drawing.meta.title" @update:model-value="setMeta('title', $event)" placeholder="用户管理" />
-              </div>
-              <div class="form-block">
-                <span class="form-label">列表接口</span>
-                <el-input :model-value="drawing.meta.endpoint ?? ''" @update:model-value="setMeta('endpoint', $event)" placeholder="/system/users" />
-              </div>
-              <div class="form-block">
-                <span class="form-label">实体名</span>
-                <el-input :model-value="drawing.meta.entity ?? ''" @update:model-value="setMeta('entity', $event)" placeholder="用户" />
-              </div>
-            </template>
-            <template v-else>
-              <div class="inspector-head">
-                <strong>{{ selectedSpec?.label }}</strong>
-                <span class="muted">{{ selected.id }}</span>
-                <el-tag size="small" :type="selected.locked ? 'info' : 'success'">{{ selected.locked ? '已锁定' : '可编辑' }}</el-tag>
-              </div>
-              <p class="muted inspector-desc">{{ selectedSpec?.description }}</p>
+    <!-- ③ 底部状态条：CAD 式信息栏（吸附/区域线/元素统计），只有 24px。 -->
+    <div class="dz-status">
+      <button class="dz-status__btn" type="button" :class="{ 'is-on': snap }" @click="snap = !snap">吸附 {{ snap ? '开' : '关' }}</button>
+      <button class="dz-status__btn" type="button" :class="{ 'is-on': showRegions }" @click="showRegions = !showRegions">区域线</button>
+      <span class="dz-status__sep" />
+      <span>{{ drawing.elements.length }} 元素</span>
+      <span v-if="selectedIds.length">{{ selectedIds.length }} 选中</span>
+      <span class="dz-status__grow" />
+      <span v-if="selected">{{ selectedSpec?.label }} · {{ selected.id }}</span>
+      <span class="dz-status__sep" />
+      <span>{{ canvasSize }}</span>
+      <span>{{ Math.round(zoom * 100) }}%</span>
+      <span class="dz-status__hint">Alt / 中键拖拽平移 · Ctrl+滚轮缩放 · 双击元素改属性</span>
+      <el-button v-if="selected" text size="small" class="dz-status__link" @click="openInspector('props')">属性</el-button>
+    </div>
 
-              <div class="form-block">
-                <span class="form-label">文案</span>
-                <el-input :model-value="selected.text" @update:model-value="selected.text = $event; markDirty()" />
-              </div>
+    <!-- ④ 元素操作浮条：选中后贴在画布底部居中，不再占用工具条宽度。 -->
+    <transition name="dz-rise">
+      <div v-if="selectedIds.length" class="dz-floating">
+        <span class="dz-floating__name">{{ selected ? (selectedSpec?.label + ' · ' + selected.id) : `${selectedIds.length} 个元素` }}</span>
+        <span class="dz-divider" />
+        <button class="dz-icon dz-icon--sm" type="button" title="复制" :disabled="!selected" @click="duplicateSelected">
+          <el-icon :size="13"><DocumentAdd /></el-icon>
+        </button>
+        <button class="dz-icon dz-icon--sm" type="button" title="上移一层" :disabled="!selected" @click="bringForward">
+          <el-icon :size="13"><SortUp /></el-icon>
+        </button>
+        <button class="dz-icon dz-icon--sm" type="button" title="下移一层" :disabled="!selected" @click="sendBackward">
+          <el-icon :size="13"><SortDown /></el-icon>
+        </button>
+        <button class="dz-icon dz-icon--sm" type="button" title="锁定/解锁" :disabled="!selected" @click="toggleLock">
+          <el-icon :size="13"><MagicStick /></el-icon>
+        </button>
+        <button class="dz-icon dz-icon--sm is-danger" type="button" title="删除" @click="removeSelected">
+          <el-icon :size="13"><Delete /></el-icon>
+        </button>
+        <span class="dz-divider" />
+        <button class="dz-btn dz-btn--px" type="button" @click="openInspector('props')">属性</button>
+        <button class="dz-btn dz-btn--px" type="button" @click="openInspector('bindings')">数据/事件</button>
+        <button class="dz-btn dz-btn--px" type="button" @click="openInspector('vibe')">模板</button>
+      </div>
+    </transition>
 
-              <div v-if="selectedSpec?.editable.includes('label')" class="form-block">
-                <span class="form-label">标签 label</span>
-                <el-input :model-value="String(selectedProps.label ?? '')" @update:model-value="setProp('label', $event)" />
-              </div>
-              <div v-if="selectedSpec?.editable.includes('prop')" class="form-block">
-                <span class="form-label">字段 prop</span>
-                <el-input :model-value="String(selectedProps.prop ?? '')" @update:model-value="setProp('prop', $event)" placeholder="nickname" />
-              </div>
-              <div v-if="selectedSpec?.editable.includes('help')" class="form-block">
-                <span class="form-label">说明</span>
-                <el-input :model-value="String(selectedProps.help ?? '')" @update:model-value="setProp('help', $event)" />
-              </div>
-
-              <!-- 列 -->
-              <template v-if="selected.role === 'column'">
-                <div class="form-block">
-                  <span class="form-label">单元格语义</span>
-                  <el-select :model-value="selectedProps.cell ?? 'text'" @update:model-value="setProp('cell', $event)">
-                    <el-option v-for="kind in ['text','code','status','tagMap','datetime','dict','link','custom']" :key="kind" :label="kind" :value="kind" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">对齐</span>
-                  <el-select :model-value="selectedProps.align ?? 'left'" @update:model-value="setProp('align', $event)">
-                    <el-option label="左" value="left" /><el-option label="中" value="center" /><el-option label="右" value="right" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">固定</span>
-                  <el-select :model-value="selectedProps.fixed ?? ''" @update:model-value="setProp('fixed', $event)" clearable>
-                    <el-option label="不固定" value="" /><el-option label="左" value="left" /><el-option label="右" value="right" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">状态映射 tagMap（JSON）</span>
-                  <el-input type="textarea" :rows="3" :model-value="jsonPropOf('tagMap')" @update:model-value="setJsonProp('tagMap', $event)" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">跨资源取值 resolveFrom（JSON）</span>
-                  <el-input type="textarea" :rows="3" :model-value="jsonPropOf('resolveFrom')" @update:model-value="setJsonProp('resolveFrom', $event)" />
-                </div>
-              </template>
-
-              <!-- 字段 -->
-              <template v-if="selected.role === 'field'">
-                <div class="form-block">
-                  <span class="form-label">控件</span>
-                  <el-select :model-value="selectedProps.control ?? 'input'" @update:model-value="setProp('control', $event)">
-                    <el-option v-for="control in ['input','password','textarea','number','select','radio','switch','treeSelect','date']" :key="control" :label="control" :value="control" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">必填</span>
-                  <el-switch :model-value="Boolean(selectedProps.required)" @update:model-value="setProp('required', $event)" />
-                  <span class="muted hint">必填会同时生成标签星号与校验规则</span>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">编辑时禁用</span>
-                  <el-switch :model-value="Boolean(selectedProps.disabledOnEdit)" @update:model-value="setProp('disabledOnEdit', $event)" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">栅格跨度</span>
-                  <el-radio-group :model-value="selectedProps.span ?? 24" @update:model-value="setProp('span', $event)">
-                    <el-radio :value="12">半行</el-radio><el-radio :value="24">整行</el-radio>
-                  </el-radio-group>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">选项 options（JSON）</span>
-                  <el-input type="textarea" :rows="3" :model-value="jsonPropOf('options')" @update:model-value="setJsonProp('options', $event)" placeholder='[{"label":"正常","value":"active"}]' />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">字典编码</span>
-                  <el-input :model-value="String(selectedProps.dict ?? '')" @update:model-value="setProp('dict', $event)" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">树接口</span>
-                  <el-input :model-value="String(selectedProps.treeEndpoint ?? '')" @update:model-value="setProp('treeEndpoint', $event)" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">校验规则（JSON）</span>
-                  <el-input type="textarea" :rows="3" :model-value="jsonPropOf('rules')" @update:model-value="setJsonProp('rules', $event)" />
-                </div>
-              </template>
-
-              <!-- 查询 -->
-              <template v-if="selected.role === 'query'">
-                <div class="form-block">
-                  <span class="form-label">控件</span>
-                  <el-select :model-value="selectedProps.control ?? 'input'" @update:model-value="setProp('control', $event)">
-                    <el-option label="输入框" value="input" /><el-option label="下拉" value="select" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">匹配方式</span>
-                  <el-select :model-value="selectedProps.match ?? ''" @update:model-value="setProp('match', $event)" clearable placeholder="按控件推断">
-                    <el-option label="精确 eq" value="eq" /><el-option label="模糊 like" value="like" /><el-option label="集合 in" value="in" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">参与模糊匹配的字段</span>
-                  <el-input
-                    :model-value="(selectedProps.props ?? []).join(',')"
-                    @update:model-value="setProp('props', $event ? $event.split(',').map((item: string) => item.trim()).filter(Boolean) : null)"
-                    placeholder="username,nickname"
-                  />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">占位提示</span>
-                  <el-input :model-value="String(selectedProps.placeholder ?? '')" @update:model-value="setProp('placeholder', $event)" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">选项 options（JSON）</span>
-                  <el-input type="textarea" :rows="3" :model-value="jsonPropOf('options')" @update:model-value="setJsonProp('options', $event)" />
-                </div>
-              </template>
-
-              <!-- 动作 -->
-              <template v-if="selected.role === 'action'">
-                <div class="form-block">
-                  <span class="form-label">动作类型</span>
-                  <el-select :model-value="selectedProps.kind ?? 'request'" @update:model-value="setProp('kind', $event)">
-                    <el-option v-for="kind in ['create','edit','delete','toggle','detail','request']" :key="kind" :label="kind" :value="kind" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">样式</span>
-                  <el-select :model-value="selectedProps.variant ?? 'default'" @update:model-value="setProp('variant', $event)">
-                    <el-option v-for="variant in ['default','primary','success','warning','danger']" :key="variant" :label="variant" :value="variant" />
-                  </el-select>
-                </div>
-                <div class="form-block">
-                  <span class="form-label">权限码</span>
-                  <el-input :model-value="String(selectedProps.permission ?? '')" @update:model-value="setProp('permission', $event)" placeholder="system:user:add" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">请求模板 request（JSON）</span>
-                  <el-input type="textarea" :rows="3" :model-value="jsonPropOf('request')" @update:model-value="setJsonProp('request', $event)" placeholder='{"method":"DELETE","path":"/system/users/{id}"}' />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">二次确认文案</span>
-                  <el-input :model-value="String(selectedProps.confirm ?? '')" @update:model-value="setProp('confirm', $event)" placeholder="确定删除「{nickname}」？" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">行级禁用条件（JSON）</span>
-                  <el-input type="textarea" :rows="2" :model-value="jsonPropOf('disabledWhen')" @update:model-value="setJsonProp('disabledWhen', $event)" />
-                </div>
-                <div class="form-block">
-                  <span class="form-label">行级可见条件（JSON）</span>
-                  <el-input type="textarea" :rows="2" :model-value="jsonPropOf('visibleWhen')" @update:model-value="setJsonProp('visibleWhen', $event)" />
-                </div>
-              </template>
-
-              <!-- 容器 -->
-              <template v-if="selectedSpec?.layer === 'container'">
-                <div v-if="selectedSpec.editable.includes('endpoint')" class="form-block">
-                  <span class="form-label">接口 endpoint</span>
-                  <el-input :model-value="String(selectedProps.endpoint ?? '')" @update:model-value="setProp('endpoint', $event)" />
-                </div>
-                <div v-if="selectedSpec.editable.includes('pageSize')" class="form-block">
-                  <span class="form-label">每页条数</span>
-                  <el-input-number :model-value="Number(selectedProps.pageSize ?? 10)" @update:model-value="setProp('pageSize', Number($event))" :min="5" :max="200" />
-                </div>
-                <div v-if="selectedSpec.editable.includes('layout')" class="form-block">
-                  <span class="form-label">页面形态</span>
-                  <el-select :model-value="selectedProps.layout ?? 'table'" @update:model-value="setProp('layout', $event)">
-                    <el-option label="查询 + 表格" value="table" /><el-option label="树形表格" value="tree-table" />
-                  </el-select>
-                </div>
-                <div v-if="selectedSpec.editable.includes('treeEndpointOf')" class="form-block">
-                  <span class="form-label">树接口</span>
-                  <el-input :model-value="String(selectedProps.treeEndpointOf ?? '')" @update:model-value="setProp('treeEndpointOf', $event)" />
-                </div>
-                <div v-if="selectedSpec.editable.includes('treeParam')" class="form-block">
-                  <span class="form-label">查询参数名</span>
-                  <el-input :model-value="String(selectedProps.treeParam ?? '')" @update:model-value="setProp('treeParam', $event)" />
-                </div>
-              </template>
-
-              <el-divider />
-              <div class="inspector-actions">
-                <el-button size="small" @click="toggleLock">{{ selected.locked ? '解锁' : '锁定' }}</el-button>
-                <el-button size="small" @click="duplicateSelected">复制</el-button>
-                <el-button size="small" type="danger" @click="removeSelected">删除</el-button>
-              </div>
-            </template>
-          </el-tab-pane>
-
-          <el-tab-pane :label="`数据与事件${selected?.bindings.length ? ' · ' + selected.bindings.length : ''}`" name="bindings">
-            <template v-if="!selected">
-              <p class="muted empty-hint">选中元素后可挂数据通道与事件通道。</p>
-            </template>
-            <template v-else>
-              <div class="form-block">
-                <span class="form-label">可用通道</span>
-                <div class="channel-list">
-                  <el-button
-                    v-for="channel in selectedChannels"
-                    :key="channel.channel"
-                    size="small"
-                    :icon="channel.kind === 'data' ? Link : Promotion"
-                    @click="addBinding(channel.kind, channel.channel)"
-                  >
-                    {{ channel.label }}（{{ channel.channel }}）
-                  </el-button>
-                </div>
-              </div>
-              <div v-for="(binding, index) in selected.bindings" :key="index" class="binding-card">
-                <div class="binding-card__head">
-                  <el-tag size="small" :type="binding.kind === 'data' ? 'success' : 'warning'">
-                    {{ binding.kind === 'data' ? '数据' : '事件' }}
-                  </el-tag>
-                  <code>{{ binding.channel }}</code>
-                  <el-button text size="small" type="danger" :icon="Delete" @click="removeBinding(index)" />
-                </div>
-                <div v-if="binding.kind === 'data'" class="form-block">
-                  <span class="form-label">数据源</span>
-                  <el-input :model-value="binding.source ?? ''" @update:model-value="setBindingField(index, 'source', $event)" placeholder="行字段名 / 上下文键" />
-                </div>
-                <template v-else>
-                  <div class="form-block">
-                    <span class="form-label">动作</span>
-                    <el-select :model-value="binding.action ?? 'reload'" @update:model-value="setBindingField(index, 'action', $event)">
-                      <el-option v-for="action in ['navigate','request','reload','dialog','emit']" :key="action" :label="action" :value="action" />
-                    </el-select>
-                  </div>
-                  <div class="form-block">
-                    <span class="form-label">参数 params（JSON）</span>
-                    <el-input
-                      type="textarea" :rows="3"
-                      :model-value="binding.params ? JSON.stringify(binding.params, null, 2) : ''"
-                      @update:model-value="setBindingParams(index, $event)"
-                      placeholder='{"method":"POST","path":"/system/users"}' 
-                    />
-                  </div>
-                </template>
-              </div>
-              <p v-if="selectedIssues.length" class="issue-list">
-                <span v-for="(issue, index) in selectedIssues" :key="index">· {{ issue }}</span>
-              </p>
-            </template>
-          </el-tab-pane>
-
-          <el-tab-pane label="vibeelement" name="vibe">
-            <template v-if="!selected">
-              <p class="muted empty-hint">选中元素后可以写模板片段，改一个字即时预览。</p>
-            </template>
-            <template v-else>
-              <div class="form-block">
-                <span class="form-label">
-                  模板片段
-                  <el-button text size="small" @click="ensureCode">填入默认模板</el-button>
-                </span>
-                <el-input
-                  type="textarea" :rows="6" resize="vertical"
-                  :model-value="String(selectedProps.code ?? '')"
-                  @update:model-value="setProp('code', $event)"
-                  placeholder='<el-button type="primary" @click="onClick">{{ label }}</el-button>'
-                />
-                <span class="muted hint">
-                  只允许插值与已注册组件；禁 &lt;script&gt; / v-html / 内联表达式 —— 模板会随图纸下发，必须可安全执行。
-                </span>
-              </div>
-              <div class="form-block">
-                <span class="form-label">实时预览</span>
-                <div class="vibe-preview">
-                  <VibeElement
-                    v-if="selectedVibe && selectedVibe.code"
-                    :vibe="selectedVibe"
-                    :data="vibePreviewData"
-                    :handlers="vibeHandlers"
-                  />
-                  <span v-else class="muted">该元素还没写模板片段（按角色默认样式上线）</span>
-                </div>
-              </div>
-              <p v-if="selectedIssues.length" class="issue-list">
-                <span v-for="(issue, index) in selectedIssues" :key="index">· {{ issue }}</span>
-              </p>
-            </template>
-          </el-tab-pane>
-
-          <el-tab-pane :label="`编译${diagnostics.length ? ' · ' + diagnostics.length : ''}`" name="compile">
-            <div v-if="compileResult" class="compile-summary">
-              <div><span>页面 key</span><strong>{{ compileResult.key }}</strong></div>
-              <div><span>列</span><strong>{{ compileResult.analysis.columns.length }}</strong></div>
-              <div><span>字段</span><strong>{{ compileResult.analysis.fields.length }}</strong></div>
-              <div><span>查询</span><strong>{{ compileResult.analysis.queries.length }}</strong></div>
-              <div><span>动作</span><strong>{{ compileResult.analysis.actions.length }}</strong></div>
-              <div><span>左树</span><strong>{{ compileResult.analysis.hasTree ? '有' : '无' }}</strong></div>
-              <div><span>AI</span><strong>{{ compileResult.ai.enabled ? compileResult.ai.model : '未启用' }}</strong></div>
-            </div>
-            <div v-if="diagnostics.length" class="diagnostic-list">
-              <div v-for="(item, index) in diagnostics" :key="index" class="diagnostic" :class="`is-${item.level}`">
-                <el-tag size="small" :type="item.level === 'error' ? 'danger' : item.level === 'warn' ? 'warning' : 'info'">{{ item.level }}</el-tag>
-                <span>{{ item.message }}</span>
-              </div>
-            </div>
-            <p v-else class="muted">没有诊断，可以发布。</p>
-            <template v-if="questions.length">
-              <el-divider />
-              <div class="form-block">
-                <span class="form-label">会问模型的字段</span>
-                <div class="question-list">
-                  <div v-for="question in questions" :key="question.id" class="question">
-                    <code>{{ question.elementId ?? 'meta' }}</code>
-                    <span>{{ question.prompt }}</span>
-                  </div>
-                </div>
-              </div>
-            </template>
+    <!-- ⑤ 检查器：属性 / 数据与事件 / vibeelement / 编译，全部在弹窗里。 -->
+    <el-dialog
+      v-model="inspectorOpen"
+      :title="inspectorTitle"
+      width="min(880px, 92vw)"
+      top="6vh"
+      append-to-body
+      destroy-on-close
+      class="dz-dialog"
+    >
+      <div class="dz-inspector">
+      <el-tabs v-model="inspectorTab" class="inspector-tabs">
+        <el-tab-pane :label="selected ? '属性' : '页面设置'" name="props">
+          <template v-if="!selected">
+            <p class="muted empty-hint">选中一个元素后在这里配置；多选时只显示数量（{{ selectedIds.length }}）。</p>
             <el-divider />
             <div class="form-block">
-              <span class="form-label">编译出的 schema（即将发布的内容）</span>
-              <el-input type="textarea" :rows="14" :model-value="JSON.stringify(compileResult?.schema ?? {}, null, 2)" readonly />
+              <span class="form-label">页面 key</span>
+              <el-input :model-value="drawing.meta.key" @update:model-value="setMeta('key', $event)" placeholder="system.user" />
             </div>
-          </el-tab-pane>
-        </el-tabs>
-      </aside>
-    </div>
+            <div class="form-block">
+              <span class="form-label">页面标题</span>
+              <el-input :model-value="drawing.meta.title" @update:model-value="setMeta('title', $event)" placeholder="用户管理" />
+            </div>
+            <div class="form-block">
+              <span class="form-label">列表接口</span>
+              <el-input :model-value="drawing.meta.endpoint ?? ''" @update:model-value="setMeta('endpoint', $event)" placeholder="/system/users" />
+            </div>
+            <div class="form-block">
+              <span class="form-label">实体名</span>
+              <el-input :model-value="drawing.meta.entity ?? ''" @update:model-value="setMeta('entity', $event)" placeholder="用户" />
+            </div>
+          </template>
+          <template v-else>
+            <div class="inspector-head">
+              <strong>{{ selectedSpec?.label }}</strong>
+              <span class="muted">{{ selected.id }}</span>
+              <el-tag size="small" :type="selected.locked ? 'info' : 'success'">{{ selected.locked ? '已锁定' : '可编辑' }}</el-tag>
+            </div>
+            <p class="muted inspector-desc">{{ selectedSpec?.description }}</p>
+
+            <div class="form-block">
+              <span class="form-label">文案</span>
+              <el-input :model-value="selected.text" @update:model-value="selected.text = $event; markDirty()" />
+            </div>
+
+            <div v-if="selectedSpec?.editable.includes('label')" class="form-block">
+              <span class="form-label">标签 label</span>
+              <el-input :model-value="String(selectedProps.label ?? '')" @update:model-value="setProp('label', $event)" />
+            </div>
+            <div v-if="selectedSpec?.editable.includes('prop')" class="form-block">
+              <span class="form-label">字段 prop</span>
+              <el-input :model-value="String(selectedProps.prop ?? '')" @update:model-value="setProp('prop', $event)" placeholder="nickname" />
+            </div>
+            <div v-if="selectedSpec?.editable.includes('help')" class="form-block">
+              <span class="form-label">说明</span>
+              <el-input :model-value="String(selectedProps.help ?? '')" @update:model-value="setProp('help', $event)" />
+            </div>
+
+            <!-- 列 -->
+            <template v-if="selected.role === 'column'">
+              <div class="form-block">
+                <span class="form-label">单元格语义</span>
+                <el-select :model-value="selectedProps.cell ?? 'text'" @update:model-value="setProp('cell', $event)">
+                  <el-option v-for="kind in ['text','code','status','tagMap','datetime','dict','link','custom']" :key="kind" :label="kind" :value="kind" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">对齐</span>
+                <el-select :model-value="selectedProps.align ?? 'left'" @update:model-value="setProp('align', $event)">
+                  <el-option label="左" value="left" /><el-option label="中" value="center" /><el-option label="右" value="right" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">固定</span>
+                <el-select :model-value="selectedProps.fixed ?? ''" @update:model-value="setProp('fixed', $event)" clearable>
+                  <el-option label="不固定" value="" /><el-option label="左" value="left" /><el-option label="右" value="right" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">状态映射 tagMap（JSON）</span>
+                <el-input type="textarea" :rows="3" :model-value="jsonPropOf('tagMap')" @update:model-value="setJsonProp('tagMap', $event)" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">跨资源取值 resolveFrom（JSON）</span>
+                <el-input type="textarea" :rows="3" :model-value="jsonPropOf('resolveFrom')" @update:model-value="setJsonProp('resolveFrom', $event)" />
+              </div>
+            </template>
+
+            <!-- 字段 -->
+            <template v-if="selected.role === 'field'">
+              <div class="form-block">
+                <span class="form-label">控件</span>
+                <el-select :model-value="selectedProps.control ?? 'input'" @update:model-value="setProp('control', $event)">
+                  <el-option v-for="control in ['input','password','textarea','number','select','radio','switch','treeSelect','date']" :key="control" :label="control" :value="control" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">必填</span>
+                <el-switch :model-value="Boolean(selectedProps.required)" @update:model-value="setProp('required', $event)" />
+                <span class="muted hint">必填会同时生成标签星号与校验规则</span>
+              </div>
+              <div class="form-block">
+                <span class="form-label">编辑时禁用</span>
+                <el-switch :model-value="Boolean(selectedProps.disabledOnEdit)" @update:model-value="setProp('disabledOnEdit', $event)" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">栅格跨度</span>
+                <el-radio-group :model-value="selectedProps.span ?? 24" @update:model-value="setProp('span', $event)">
+                  <el-radio :value="12">半行</el-radio><el-radio :value="24">整行</el-radio>
+                </el-radio-group>
+              </div>
+              <div class="form-block">
+                <span class="form-label">选项 options（JSON）</span>
+                <el-input type="textarea" :rows="3" :model-value="jsonPropOf('options')" @update:model-value="setJsonProp('options', $event)" placeholder='[{"label":"正常","value":"active"}]' />
+              </div>
+              <div class="form-block">
+                <span class="form-label">字典编码</span>
+                <el-input :model-value="String(selectedProps.dict ?? '')" @update:model-value="setProp('dict', $event)" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">树接口</span>
+                <el-input :model-value="String(selectedProps.treeEndpoint ?? '')" @update:model-value="setProp('treeEndpoint', $event)" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">校验规则（JSON）</span>
+                <el-input type="textarea" :rows="3" :model-value="jsonPropOf('rules')" @update:model-value="setJsonProp('rules', $event)" />
+              </div>
+            </template>
+
+            <!-- 查询 -->
+            <template v-if="selected.role === 'query'">
+              <div class="form-block">
+                <span class="form-label">控件</span>
+                <el-select :model-value="selectedProps.control ?? 'input'" @update:model-value="setProp('control', $event)">
+                  <el-option label="输入框" value="input" /><el-option label="下拉" value="select" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">匹配方式</span>
+                <el-select :model-value="selectedProps.match ?? ''" @update:model-value="setProp('match', $event)" clearable placeholder="按控件推断">
+                  <el-option label="精确 eq" value="eq" /><el-option label="模糊 like" value="like" /><el-option label="集合 in" value="in" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">参与模糊匹配的字段</span>
+                <el-input
+                  :model-value="(selectedProps.props ?? []).join(',')"
+                  @update:model-value="setProp('props', $event ? $event.split(',').map((item: string) => item.trim()).filter(Boolean) : null)"
+                  placeholder="username,nickname"
+                />
+              </div>
+              <div class="form-block">
+                <span class="form-label">占位提示</span>
+                <el-input :model-value="String(selectedProps.placeholder ?? '')" @update:model-value="setProp('placeholder', $event)" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">选项 options（JSON）</span>
+                <el-input type="textarea" :rows="3" :model-value="jsonPropOf('options')" @update:model-value="setJsonProp('options', $event)" />
+              </div>
+            </template>
+
+            <!-- 动作 -->
+            <template v-if="selected.role === 'action'">
+              <div class="form-block">
+                <span class="form-label">动作类型</span>
+                <el-select :model-value="selectedProps.kind ?? 'request'" @update:model-value="setProp('kind', $event)">
+                  <el-option v-for="kind in ['create','edit','delete','toggle','detail','request']" :key="kind" :label="kind" :value="kind" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">样式</span>
+                <el-select :model-value="selectedProps.variant ?? 'default'" @update:model-value="setProp('variant', $event)">
+                  <el-option v-for="variant in ['default','primary','success','warning','danger']" :key="variant" :label="variant" :value="variant" />
+                </el-select>
+              </div>
+              <div class="form-block">
+                <span class="form-label">权限码</span>
+                <el-input :model-value="String(selectedProps.permission ?? '')" @update:model-value="setProp('permission', $event)" placeholder="system:user:add" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">请求模板 request（JSON）</span>
+                <el-input type="textarea" :rows="3" :model-value="jsonPropOf('request')" @update:model-value="setJsonProp('request', $event)" placeholder='{"method":"DELETE","path":"/system/users/{id}"}' />
+              </div>
+              <div class="form-block">
+                <span class="form-label">二次确认文案</span>
+                <el-input :model-value="String(selectedProps.confirm ?? '')" @update:model-value="setProp('confirm', $event)" placeholder="确定删除「{nickname}」？" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">行级禁用条件（JSON）</span>
+                <el-input type="textarea" :rows="2" :model-value="jsonPropOf('disabledWhen')" @update:model-value="setJsonProp('disabledWhen', $event)" />
+              </div>
+              <div class="form-block">
+                <span class="form-label">行级可见条件（JSON）</span>
+                <el-input type="textarea" :rows="2" :model-value="jsonPropOf('visibleWhen')" @update:model-value="setJsonProp('visibleWhen', $event)" />
+              </div>
+            </template>
+
+            <!-- 容器 -->
+            <template v-if="selectedSpec?.layer === 'container'">
+              <div v-if="selectedSpec.editable.includes('endpoint')" class="form-block">
+                <span class="form-label">接口 endpoint</span>
+                <el-input :model-value="String(selectedProps.endpoint ?? '')" @update:model-value="setProp('endpoint', $event)" />
+              </div>
+              <div v-if="selectedSpec.editable.includes('pageSize')" class="form-block">
+                <span class="form-label">每页条数</span>
+                <el-input-number :model-value="Number(selectedProps.pageSize ?? 10)" @update:model-value="setProp('pageSize', Number($event))" :min="5" :max="200" />
+              </div>
+              <div v-if="selectedSpec.editable.includes('layout')" class="form-block">
+                <span class="form-label">页面形态</span>
+                <el-select :model-value="selectedProps.layout ?? 'table'" @update:model-value="setProp('layout', $event)">
+                  <el-option label="查询 + 表格" value="table" /><el-option label="树形表格" value="tree-table" />
+                </el-select>
+              </div>
+              <div v-if="selectedSpec.editable.includes('treeEndpointOf')" class="form-block">
+                <span class="form-label">树接口</span>
+                <el-input :model-value="String(selectedProps.treeEndpointOf ?? '')" @update:model-value="setProp('treeEndpointOf', $event)" />
+              </div>
+              <div v-if="selectedSpec.editable.includes('treeParam')" class="form-block">
+                <span class="form-label">查询参数名</span>
+                <el-input :model-value="String(selectedProps.treeParam ?? '')" @update:model-value="setProp('treeParam', $event)" />
+              </div>
+            </template>
+
+            <el-divider />
+            <div class="inspector-actions">
+              <el-button size="small" @click="toggleLock">{{ selected.locked ? '解锁' : '锁定' }}</el-button>
+              <el-button size="small" @click="duplicateSelected">复制</el-button>
+              <el-button size="small" type="danger" @click="removeSelected">删除</el-button>
+            </div>
+          </template>
+        </el-tab-pane>
+
+        <el-tab-pane :label="`数据与事件${selected?.bindings.length ? ' · ' + selected.bindings.length : ''}`" name="bindings">
+          <template v-if="!selected">
+            <p class="muted empty-hint">选中元素后可挂数据通道与事件通道。</p>
+          </template>
+          <template v-else>
+            <div class="form-block">
+              <span class="form-label">可用通道</span>
+              <div class="channel-list">
+                <el-button
+                  v-for="channel in selectedChannels"
+                  :key="channel.channel"
+                  size="small"
+                  :icon="channel.kind === 'data' ? Link : Promotion"
+                  @click="addBinding(channel.kind, channel.channel)"
+                >
+                  {{ channel.label }}（{{ channel.channel }}）
+                </el-button>
+              </div>
+            </div>
+            <div v-for="(binding, index) in selected.bindings" :key="index" class="binding-card">
+              <div class="binding-card__head">
+                <el-tag size="small" :type="binding.kind === 'data' ? 'success' : 'warning'">
+                  {{ binding.kind === 'data' ? '数据' : '事件' }}
+                </el-tag>
+                <code>{{ binding.channel }}</code>
+                <el-button text size="small" type="danger" :icon="Delete" @click="removeBinding(index)" />
+              </div>
+              <div v-if="binding.kind === 'data'" class="form-block">
+                <span class="form-label">数据源</span>
+                <el-input :model-value="binding.source ?? ''" @update:model-value="setBindingField(index, 'source', $event)" placeholder="行字段名 / 上下文键" />
+              </div>
+              <template v-else>
+                <div class="form-block">
+                  <span class="form-label">动作</span>
+                  <el-select :model-value="binding.action ?? 'reload'" @update:model-value="setBindingField(index, 'action', $event)">
+                    <el-option v-for="action in ['navigate','request','reload','dialog','emit']" :key="action" :label="action" :value="action" />
+                  </el-select>
+                </div>
+                <div class="form-block">
+                  <span class="form-label">参数 params（JSON）</span>
+                  <el-input
+                    type="textarea" :rows="3"
+                    :model-value="binding.params ? JSON.stringify(binding.params, null, 2) : ''"
+                    @update:model-value="setBindingParams(index, $event)"
+                    placeholder='{"method":"POST","path":"/system/users"}' 
+                  />
+                </div>
+              </template>
+            </div>
+            <p v-if="selectedIssues.length" class="issue-list">
+              <span v-for="(issue, index) in selectedIssues" :key="index">· {{ issue }}</span>
+            </p>
+          </template>
+        </el-tab-pane>
+
+        <el-tab-pane label="vibeelement" name="vibe">
+          <template v-if="!selected">
+            <p class="muted empty-hint">选中元素后可以写模板片段，改一个字即时预览。</p>
+          </template>
+          <template v-else>
+            <div class="form-block">
+              <span class="form-label">
+                模板片段
+                <el-button text size="small" @click="ensureCode">填入默认模板</el-button>
+              </span>
+              <el-input
+                type="textarea" :rows="6" resize="vertical"
+                :model-value="String(selectedProps.code ?? '')"
+                @update:model-value="setProp('code', $event)"
+                placeholder='<el-button type="primary" @click="onClick">{{ label }}</el-button>'
+              />
+              <span class="muted hint">
+                只允许插值与已注册组件；禁 &lt;script&gt; / v-html / 内联表达式 —— 模板会随图纸下发，必须可安全执行。
+              </span>
+            </div>
+            <div class="form-block">
+              <span class="form-label">实时预览</span>
+              <div class="vibe-preview">
+                <VibeElement
+                  v-if="selectedVibe && selectedVibe.code"
+                  :vibe="selectedVibe"
+                  :data="vibePreviewData"
+                  :handlers="vibeHandlers"
+                />
+                <span v-else class="muted">该元素还没写模板片段（按角色默认样式上线）</span>
+              </div>
+            </div>
+            <p v-if="selectedIssues.length" class="issue-list">
+              <span v-for="(issue, index) in selectedIssues" :key="index">· {{ issue }}</span>
+            </p>
+          </template>
+        </el-tab-pane>
+
+        <el-tab-pane :label="`编译${diagnostics.length ? ' · ' + diagnostics.length : ''}`" name="compile">
+          <div v-if="compileResult" class="compile-summary">
+            <div><span>页面 key</span><strong>{{ compileResult.key }}</strong></div>
+            <div><span>列</span><strong>{{ compileResult.analysis.columns.length }}</strong></div>
+            <div><span>字段</span><strong>{{ compileResult.analysis.fields.length }}</strong></div>
+            <div><span>查询</span><strong>{{ compileResult.analysis.queries.length }}</strong></div>
+            <div><span>动作</span><strong>{{ compileResult.analysis.actions.length }}</strong></div>
+            <div><span>左树</span><strong>{{ compileResult.analysis.hasTree ? '有' : '无' }}</strong></div>
+            <div><span>AI</span><strong>{{ compileResult.ai.enabled ? compileResult.ai.model : '未启用' }}</strong></div>
+          </div>
+          <div v-if="diagnostics.length" class="diagnostic-list">
+            <div v-for="(item, index) in diagnostics" :key="index" class="diagnostic" :class="`is-${item.level}`">
+              <el-tag size="small" :type="item.level === 'error' ? 'danger' : item.level === 'warn' ? 'warning' : 'info'">{{ item.level }}</el-tag>
+              <span>{{ item.message }}</span>
+            </div>
+          </div>
+          <p v-else class="muted">没有诊断，可以发布。</p>
+          <template v-if="questions.length">
+            <el-divider />
+            <div class="form-block">
+              <span class="form-label">会问模型的字段</span>
+              <div class="question-list">
+                <div v-for="question in questions" :key="question.id" class="question">
+                  <code>{{ question.elementId ?? 'meta' }}</code>
+                  <span>{{ question.prompt }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+          <el-divider />
+          <div class="form-block">
+            <span class="form-label">编译出的 schema（即将发布的内容）</span>
+            <el-input type="textarea" :rows="14" :model-value="JSON.stringify(compileResult?.schema ?? {}, null, 2)" readonly />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.ui-designer { min-width: 0; }
-.designer-layout {
-  display: grid; grid-template-columns: 300px minmax(0, 1fr) 380px;
-  gap: 16px; align-items: start; min-width: 0;
+/* 全出血：外层 .page 的 padding/间距一律不要，画布自己管滚动。 */
+.ui-designer {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0; min-width: 0; box-sizing: border-box;
+  background: var(--app-bg); color: var(--app-text);
+  --dz-bar-h: 40px; --dz-status-h: 24px;
 }
-.designer-layout > * { min-width: 0; }
-.designer-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0; overflow: hidden; }
-.menu-column { padding: 12px; min-width: 0; }
-.menu-column--tree { border-left: 1px solid var(--line); display: flex; flex-direction: column; }
-.menu-title {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 12px; color: var(--muted); margin-bottom: 10px;
+
+/* ① 工具条 */
+.dz-bar {
+  flex: 0 0 auto; height: var(--dz-bar-h); display: flex; align-items: center; gap: 4px;
+  padding: 0 8px; background: var(--surface); border-bottom: 1px solid var(--line);
+  font-size: 12px; user-select: none;
 }
-.role-groups { display: flex; flex-direction: column; gap: 12px; }
-.role-group { display: flex; flex-direction: column; gap: 4px; }
-.role-group__label { font-size: 11px; color: var(--muted); }
-.role-chip {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line);
-  background: var(--surface); color: var(--app-text); font-size: 12px; cursor: pointer; text-align: left;
+.dz-title {
+  display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 340px;
+  padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; cursor: pointer;
+  color: var(--app-text); font: inherit; text-align: left;
 }
-.role-chip:hover:not(:disabled) { border-color: rgba(99, 102, 241, .6); }
-.role-chip:disabled { opacity: .45; cursor: not-allowed; }
-.role-chip__dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
-.tree-scroll { max-height: 560px; }
-.tree-group { margin-bottom: 10px; }
-.tree-group__label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-.tree-row {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 4px 6px; border-radius: 6px; border: 1px solid transparent;
-  background: transparent; color: var(--app-text); font-size: 12px; cursor: pointer; text-align: left;
+.dz-title:hover { background: var(--hover); }
+.dz-title strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-title__meta { display: inline-flex; gap: 6px; flex: 0 0 auto; }
+.dz-title__meta em { font-style: normal; font-size: 11px; color: var(--muted); }
+.dz-title__meta em.is-dirty { color: #d97706; }
+.dz-title__meta em.is-error { color: #dc2626; }
+.dz-title__meta em.is-warn { color: #b45309; }
+.dz-icon {
+  position: relative; display: inline-grid; place-items: center; width: 26px; height: 26px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer;
 }
-.tree-row:hover { background: rgba(99, 102, 241, .08); }
-.tree-row.is-active { border-color: rgba(99, 102, 241, .5); background: rgba(99, 102, 241, .12); }
-.tree-row__dot { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
-.tree-row__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tree-row__role { color: var(--muted); font-size: 11px; flex: 0 0 auto; }
-.designer-canvas { display: flex; flex-direction: column; padding: 12px; gap: 10px; }
-.canvas-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.canvas-scroll { max-height: 720px; background: #eef2f7; border-radius: 8px; padding: 12px; }
-.designer-inspector { padding: 0 12px 12px; }
-.inspector-tabs :deep(.el-tabs__header) { margin-bottom: 10px; }
+.dz-icon--sm { width: 22px; height: 22px; }
+.dz-icon:hover:not(:disabled) { background: var(--hover); color: var(--app-text); }
+.dz-icon:disabled { opacity: .4; cursor: not-allowed; }
+.dz-icon.is-on { background: rgba(99, 102, 241, .14); color: #4f46e5; }
+.dz-icon.is-danger:hover { background: rgba(220, 38, 38, .12); color: #dc2626; }
+.dz-icon.is-spin :deep(.el-icon) { animation: dz-spin 1s linear infinite; }
+@keyframes dz-spin { to { transform: rotate(360deg); } }
+.dz-badge {
+  position: absolute; top: -2px; right: -2px; min-width: 13px; height: 13px; padding: 0 3px;
+  border-radius: 7px; background: #6366f1; color: #fff; font-size: 9px; line-height: 13px; text-align: center;
+}
+.dz-badge.is-danger { background: #dc2626; }
+.dz-divider { width: 1px; height: 18px; margin: 0 4px; background: var(--line); flex: 0 0 auto; }
+.dz-spacer { flex: 1 1 auto; }
+.dz-zoom { display: inline-flex; align-items: center; height: 24px; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.dz-zoom__value {
+  min-width: 46px; height: 100%; border: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+  background: transparent; color: var(--app-text); font-size: 11px; cursor: pointer;
+}
+.dz-zoom__value:hover { background: var(--hover); }
+.dz-btn {
+  height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; color: var(--app-text); font-size: 12px; cursor: pointer;
+}
+.dz-btn:hover:not(:disabled) { border-color: rgba(99, 102, 241, .55); color: #4f46e5; }
+.dz-btn:disabled { opacity: .5; cursor: not-allowed; }
+.dz-btn--primary { border-color: #4f46e5; background: #4f46e5; color: #fff; }
+.dz-btn--primary:hover:not(:disabled) { background: #4338ca; border-color: #4338ca; color: #fff; }
+.dz-btn--px { height: 22px; padding: 0 8px; font-size: 11px; }
+
+/* ② 画布区 */
+.dz-body { flex: 1 1 auto; display: flex; min-height: 0; min-width: 0; }
+.dz-rail {
+  flex: 0 0 auto; width: 176px; display: flex; flex-direction: column;
+  background: var(--surface); border-right: 1px solid var(--line); overflow: hidden;
+}
+.dz-rail__tabs { display: flex; padding: 4px; gap: 2px; border-bottom: 1px solid var(--line); }
+.dz-rail__tab {
+  flex: 1 1 0; height: 24px; display: grid; place-items: center;
+  border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.dz-rail__tab:hover { background: var(--hover); }
+.dz-rail__tab.is-active { background: rgba(99, 102, 241, .12); color: #4f46e5; }
+.dz-rail__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 6px; }
+.dz-group + .dz-group { margin-top: 10px; }
+.dz-group__label {
+  margin: 0 0 3px; padding: 0 4px; font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.dz-role, .dz-node {
+  display: flex; align-items: center; gap: 6px; width: 100%; height: 24px; padding: 0 6px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--app-text);
+  font-size: 12px; text-align: left; cursor: pointer;
+}
+.dz-role:hover:not(:disabled), .dz-node:hover { background: var(--hover); }
+.dz-role:disabled { opacity: .38; cursor: not-allowed; }
+.dz-role__dot { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto; }
+.dz-role__text, .dz-node__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-node__role { color: var(--muted); font-size: 10px; flex: 0 0 auto; }
+.dz-node.is-active { background: rgba(99, 102, 241, .14); color: #4f46e5; }
+.dz-empty { margin: 8px 4px; font-size: 11px; color: var(--muted); }
+
+.dz-viewport {
+  flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; position: relative;
+  background:
+    linear-gradient(0deg, rgba(148, 163, 184, .1) 1px, transparent 1px) 0 0 / 100% 24px,
+    var(--app-bg);
+}
+.dz-viewport.is-panning { cursor: grabbing; }
+.dz-canvas { display: inline-block; padding: 16px; min-width: 100%; min-height: 100%; box-sizing: border-box; }
+
+/* ③ 状态条 */
+.dz-status {
+  flex: 0 0 auto; height: var(--dz-status-h); display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; background: var(--surface); border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden;
+}
+.dz-status__btn {
+  height: 18px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--muted); font-size: 11px; cursor: pointer;
+}
+.dz-status__btn:hover { background: var(--hover); }
+.dz-status__btn.is-on { border-color: rgba(99, 102, 241, .4); color: #4f46e5; background: rgba(99, 102, 241, .1); }
+.dz-status__sep { width: 1px; height: 12px; background: var(--line); }
+.dz-status__grow { flex: 1 1 auto; }
+.dz-status__hint { color: var(--muted); opacity: .8; }
+.dz-status__link { height: 18px; padding: 0 4px; font-size: 11px; }
+
+/* ④ 选中浮条 */
+.dz-floating {
+  position: absolute; left: 50%; bottom: calc(var(--dz-status-h) + 14px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 2px; padding: 4px 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 7px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .14); z-index: 8;
+}
+.dz-floating__name { max-width: 200px; padding: 0 4px; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-rise-enter-active, .dz-rise-leave-active { transition: opacity .14s ease, transform .14s ease; }
+.dz-rise-enter-from, .dz-rise-leave-to { opacity: 0; transform: translate(-50%, 6px); }
+
+/* ⑤ 检查器弹窗内部 */
+.dz-inspector { max-height: 72vh; overflow: auto; padding-right: 4px; }
+.dz-inspector :deep(.el-tabs__header) { margin-bottom: 10px; }
+.form-block { display: flex; flex-direction: column; gap: 3px; margin-bottom: 9px; }
+.form-label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .inspector-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.inspector-desc { font-size: 12px; margin: 0 0 10px; }
-.form-block { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.form-label { font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; }
+.inspector-desc { margin: 0 0 10px; font-size: 12px; }
+.inspector-actions { display: flex; gap: 8px; }
 .hint { font-size: 11px; line-height: 1.5; }
 .empty-hint { font-size: 12px; }
-.inspector-actions { display: flex; gap: 8px; }
 .channel-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .channel-list :deep(.el-button) { margin: 0; }
-.binding-card { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.binding-card { margin-bottom: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
 .binding-card__head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .binding-card__head code { flex: 1 1 auto; font-size: 11px; }
-.issue-list { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #b45309; margin: 0; }
+.issue-list { display: flex; flex-direction: column; gap: 2px; margin: 0; font-size: 11px; color: #b45309; }
 .vibe-preview {
-  border: 1px dashed var(--line); border-radius: 6px; padding: 10px; min-height: 44px;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px;
+  border: 1px dashed var(--line); border-radius: 6px;
 }
 .compile-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .compile-summary div { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
@@ -969,6 +1301,13 @@ onBeforeUnmount(() => {
 .question-list { display: flex; flex-direction: column; gap: 6px; }
 .question { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .question code { font-size: 11px; color: var(--muted); }
-@media (max-width: 1600px) { .designer-layout { grid-template-columns: 260px minmax(0, 1fr) 340px; } }
-@media (max-width: 1280px) { .designer-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* 窄屏：左栏收成更窄的图标栏，工具条隐藏次要按钮。 */
+@container shell (max-width: 900px) {
+  .dz-rail { width: 132px; }
+  .dz-status__hint { display: none; }
+}
+@media (max-width: 720px) {
+  .dz-rail { position: absolute; z-index: 6; height: calc(100% - var(--dz-bar-h) - var(--dz-status-h)); }
+}
 </style>

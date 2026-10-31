@@ -17,6 +17,7 @@ import type {
 import type {
   UiCompiledPage,
   UiDiagnostic,
+  UiElementFragment,
   UiDrawing,
   UiDrawingAnalysis,
   UiElement,
@@ -335,6 +336,16 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
     })
   }
 
+  // 元素 → 所属区域：编译片段带上归属，画布才知道该把子元素交给哪个容器的壳渲染。
+  const ownerOf = new Map<string, string>()
+  for (const region of regions) {
+    for (const childId of region.childIds) ownerOf.set(childId, region.id)
+  }
+  const withOwner = (fragment: UiElementFragment): UiElementFragment => {
+    const containerId = ownerOf.get(fragment.elementId)
+    return containerId ? { ...fragment, containerId } : fragment
+  }
+
   const tableRegion = regionOfRole(ctx, 'table')
   const formRegion = regionOfRole(ctx, 'form')
   const treeRegion = regionOfRole(ctx, 'tree')
@@ -372,9 +383,13 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
     ? leavesOf(drawing, tableRegion.id, ['column'])
     : elementsOfRole(drawing, 'column')
   const columns: ColumnSchema[] = []
+  const fragments: UiElementFragment[] = []
   for (const element of columnElements) {
     const column = compileColumn(ctx, element)
     if (column) columns.push(column)
+    fragments.push(withOwner(column
+      ? { elementId: element.id, kind: 'column', schema: column }
+      : { elementId: element.id, kind: 'unsupported', reason: '该列缺少字段名或标签，编译被跳过' }))
   }
   if (!columns.length) {
     ctx.diagnostics.push({ level: 'warn', code: 'columns-empty', message: '图纸里没有可编译的列，页面表格会是空的' })
@@ -409,6 +424,9 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
   for (const element of rowActionElements) {
     const action = compileAction(ctx, element)
     if (action) actions.push(action)
+    fragments.push(withOwner(action
+      ? { elementId: element.id, kind: 'action', schema: action, scope: 'row' }
+      : { elementId: element.id, kind: 'unsupported', reason: '该按钮缺少文案或请求模板，编译被跳过' }))
   }
 
   // 表单字段：表单区子元素；没有表单容器时按全图字段元素、两栏判定。
@@ -419,6 +437,9 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
   for (const element of fieldElements) {
     const field = compileField(ctx, element, formRegion ? { width: formRegion.rect.width } : null)
     if (field) fields.push(field)
+    fragments.push(withOwner(field
+      ? { elementId: element.id, kind: 'field', schema: field }
+      : { elementId: element.id, kind: 'unsupported', reason: '该字段缺少字段名，编译被跳过' }))
   }
 
   // 页面级按钮：按规则表映射到真正的落点，映射不上的明确报「需要扩展」。
@@ -431,6 +452,10 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
   for (const element of toolbarActionElements) {
     const matched = matchPageAction(element)
     if (!matched) {
+      fragments.push({
+        elementId: element.id, kind: 'unsupported',
+        reason: '页面级按钮当前只有「新增 / 导出」两个槽位',
+      })
       report(ctx, 'warn', 'page-action-unsupported',
         `页面级按钮「${effectiveProps(element).label ?? element.text ?? element.id}」当前页面形态没有槽位：`
         + 'schema 的 actions 只渲染行操作列，页面级按钮需要页面形态扩展', element)
@@ -438,9 +463,15 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
     }
     if (matched.kind === 'create') {
       hasCreateIntent = true
+      const createAction = compileAction(ctx, element)
+      fragments.push(withOwner({
+        elementId: element.id, kind: 'create', scope: 'page',
+        ...(createAction ? { schema: createAction } : {}),
+      }))
       continue
     }
     hasExportIntent = true
+    fragments.push(withOwner({ elementId: element.id, kind: 'export', scope: 'page' }))
   }
   // 想要「新增」按钮，就必须有表单：否则按钮点了没内容，属缺陷而非提醒。
   if (hasCreateIntent && !fields.length && formRegion === null) {
@@ -462,6 +493,9 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
   for (const element of queryElements) {
     const query = compileQuery(ctx, element)
     if (query) queries.push(query)
+    fragments.push(withOwner(query
+      ? { elementId: element.id, kind: 'query', schema: query }
+      : { elementId: element.id, kind: 'unsupported', reason: '该查询条件缺少字段名，编译被跳过' }))
   }
 
   // 左树：接口必须显式给，否则追问（给不出就不编出一棵假树）。
@@ -531,6 +565,7 @@ export function compileDrawing(drawing: UiDrawing): UiCompiledPage {
 
   const analysis: UiDrawingAnalysis = {
     regions,
+    fragments,
     title: title || meta.key,
     endpoint,
     columns: columns.map((column) => column.prop),

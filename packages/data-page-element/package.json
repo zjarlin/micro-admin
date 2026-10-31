@@ -8,8 +8,13 @@
     "directory": "packages/data-page-element"
   },
   "type": "module",
-  "sideEffects": ["*.css"],
-  "files": ["src", "README.md"],
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./SchemaPage.vue": "./src/SchemaPage.vue",
@@ -18,7 +23,15 @@
     "./notifier": "./src/notifier.ts",
     "./table-shell.css": "./src/table-shell.css",
     "./VibeElement.vue": "./src/VibeElement.vue",
-    "./vibe": "./src/vibe.ts"
+    "./vibe": "./src/vibe.ts",
+    "./CrudQueryField.vue": "./src/CrudQueryField.vue",
+    "./CrudFormField.vue": "./src/CrudFormField.vue",
+    "./CrudPageHeader.vue": "./src/CrudPageHeader.vue",
+    "./CrudTable.vue": "./src/CrudTable.vue",
+    "./CellValue.vue": "./src/CellValue.vue",
+    "./HelpHint.vue": "./src/HelpHint.vue",
+    "./CrudTreePanel.vue": "./src/CrudTreePanel.vue",
+    "./CrudFilterBar.vue": "./src/CrudFilterBar.vue"
   },
   "publishConfig": {
     "access": "public"

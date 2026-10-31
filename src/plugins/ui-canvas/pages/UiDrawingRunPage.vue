@@ -65,7 +65,8 @@ onMounted(load)
 
 <template>
   <div class="page ui-run" v-loading="loading">
-    <header class="page-head">
+    <!-- 运行预览也是全出血页：让页面壳占满视口，与上线后一致（上线页没有 28px 边距）。 -->
+    <header class="page-head ui-run__bar">
       <div class="crud-head">
         <el-button text :icon="ArrowLeft" @click="router.push({ name: 'ui-canvas-designer', query: { id: String(drawingId) } })">
           回设计器
@@ -98,5 +99,8 @@ onMounted(load)
 </template>
 
 <style scoped>
-.ui-run { min-width: 0; }
+/* 全出血页：自身承担内边距，页面壳在下方自由伸展。 */
+.ui-run { min-width: 0; height: 100%; min-height: 0; padding: 16px 20px 20px; overflow: auto; gap: 12px; }
+.ui-run__bar { align-items: center; }
+.ui-run__bar h1 { font-size: 18px; }
 </style>

@@ -10,10 +10,14 @@
 
 import type {
   ActionKind,
+  ActionSchema,
   CellKind,
+  ColumnSchema,
   Condition,
   FieldControl,
   FieldOption,
+  FieldSchema,
+  QuerySchema,
   TagStyle,
 } from '@zjarlin/data-page/schema'
 
@@ -283,9 +287,44 @@ export interface UiCompiledPage {
   analysis: UiDrawingAnalysis
 }
 
+/**
+ * 元素 → 编译片段：设计器据此用**真实组件**渲染画布（所见即所得）。
+ *
+ * 关键点：片段由编译器产出，不是设计器自己按角色猜的。
+ * 因此「画布上那个按钮」与「发布后那个按钮」是同一份 `ActionSchema`。
+ */
+export type UiFragmentKind =
+  | 'column'
+  | 'query'
+  | 'field'
+  | 'action'
+  | 'create'
+  | 'export'
+  | 'unsupported'
+
+export interface UiElementFragment {
+  elementId: string
+  kind: UiFragmentKind
+  /**
+   * 该元素落在哪个容器里（区域 id）。
+   *
+   * 画布据此把列/查询/字段/行按钮交给**所属容器的真实壳**渲染（真表头、真控件），
+   * 而不是在容器外面各画一个占位框——否则就是「容器一个样、子元素另一个样」。
+   */
+  containerId?: string
+  /** 编译出的 schema 片段；`create` / `export` 只是页面级意图，没有片段。 */
+  schema?: ColumnSchema | QuerySchema | FieldSchema | ActionSchema
+  /** 动作作用域：行内动作走表格操作列，页面级动作走页头。 */
+  scope?: 'row' | 'page'
+  /** 编译不通过时的原因，画布上直接显示在元素位置。 */
+  reason?: string
+}
+
 /** 装配分析：编译器「看懂」了图纸什么，全部回显给设计器，避免黑箱。 */
 export interface UiDrawingAnalysis {
   regions: UiRegion[]
+  /** 元素 id → 编译片段，供画布做真实组件预览。 */
+  fragments: UiElementFragment[]
   title: string
   endpoint: string
   columns: string[]

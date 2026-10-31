@@ -7,7 +7,6 @@
 //
 // 页面只提供数据来源（http / 权限 / 字典），不重复写表格与弹窗。
 import { computed, onMounted } from 'vue'
-import { Download, Plus } from '@element-plus/icons-vue'
 import type { CrudPageSchema, DataTransport, FieldOption, Row } from '@zjarlin/data-page'
 import { resolveTransport } from './transport'
 import { defaultActions, resolveActions, type Notifier } from '@zjarlin/data-page'
@@ -16,11 +15,11 @@ import { useFormDialog } from '@zjarlin/data-page'
 import { useTree } from '@zjarlin/data-page'
 import { useReferences } from '@zjarlin/data-page'
 import { elementNotifier } from './notifier'
-import CrudColumn from './CrudColumn.vue'
 import CrudFilterBar from './CrudFilterBar.vue'
+import CrudPageHeader from './CrudPageHeader.vue'
+import CrudTable from './CrudTable.vue'
 import CrudFormDialog from './CrudFormDialog.vue'
 import CrudTreePanel from './CrudTreePanel.vue'
-import HelpHint from './HelpHint.vue'
 import VibeElement from './VibeElement.vue'
 import { provideVibeHost, vibeHandlers, type VibeHandler, type VibeHost } from './vibe'
 
@@ -119,6 +118,9 @@ const entity = computed(() => props.schema.entity ?? '记录')
 const actionsWidth = computed(() => Math.max(96, actions.value.length * 56 + 24))
 const rowKey = computed(() => props.schema.rowKey ?? 'id')
 
+/** 列的具名插槽名：宿主想自定义某列单元格时按同一批名字透传。 */
+const columnSlotNames = computed(() => props.schema.columns.map((column) => column.slot ?? column.prop))
+
 /** 导出 CSV：列定义即表头，避免每页手写一份。 */
 function exportCsv(): void {
   const columns = props.schema.columns
@@ -164,15 +166,13 @@ function actionHandlersOf(action: ReturnType<typeof resolveActions>[number], row
 
 <template>
   <div class="page">
-    <header class="page-head">
-      <div class="crud-head">
-        <h1>{{ schema.title }}<HelpHint :text="schema.description" :label="schema.title" /></h1>
-      </div>
-      <div class="page-actions">
-        <el-button v-if="canExport" :icon="Download" @click="exportCsv">导出</el-button>
-        <el-button v-if="canAdd" type="primary" :icon="Plus" @click="form.openCreate()">新增{{ entity }}</el-button>
-      </div>
-    </header>
+    <CrudPageHeader
+      :schema="schema"
+      :can-add="canAdd"
+      :can-export="canExport"
+      @export="exportCsv"
+      @create="form.openCreate()"
+    />
 
     <el-alert v-if="page.error" type="error" :title="page.error" :closable="false" show-icon />
 
@@ -202,49 +202,40 @@ function actionHandlersOf(action: ReturnType<typeof resolveActions>[number], row
           <span class="muted">共 {{ page.total }} 条</span>
         </CrudFilterBar>
 
-        <el-table v-loading="page.loading" :data="page.rows" :row-key="rowKey">
-          <CrudColumn
-            v-for="column in schema.columns"
-            :key="column.prop"
-            :column="column"
-            :dict="dictLabel"
-            :resolve="refs.resolveOf"
-          >
-            <template v-for="name in [column.slot ?? column.prop]" #[name]="slotProps">
-              <slot :name="name" v-bind="slotProps" />
-            </template>
-          </CrudColumn>
-          <el-table-column
-            v-if="actions.length"
-            label="操作"
-            fixed="right"
-            :width="actionsWidth"
-            class-name="crud-actions"
-          >
-            <template #default="{ row }">
-              <template v-for="action in actions" :key="action.schema.key">
-                <VibeElement
-                  v-if="action.visible(row) && action.schema.vibe?.code && action.schema.vibe"
-                  :vibe="action.schema.vibe"
-                  :data="actionDataOf(action, row)"
-                  :handlers="actionHandlersOf(action, row)"
-                />
-                <el-button
-                  v-else-if="action.visible(row)"
-                  link
-                  :type="action.schema.variant === 'danger' ? 'danger' : action.schema.variant === 'warning' ? 'warning' : 'primary'"
-                  :disabled="disabledOf(action, row)"
-                  @click="action.run(row)"
-                >
-                  {{ action.schema.label }}
-                </el-button>
-              </template>
-            </template>
-          </el-table-column>
-          <template #empty>
-            <el-empty :description="`没有匹配的${entity}`" :image-size="64" />
+        <CrudTable
+          :schema="schema"
+          :rows="page.rows"
+          :loading="page.loading"
+          :row-key="rowKey"
+          :dict="dictLabel"
+          :resolve="refs.resolveOf"
+          :has-actions="actions.length > 0"
+          :actions-width="actionsWidth"
+          :entity="entity"
+        >
+          <template v-for="name in columnSlotNames" #[name]="slotProps">
+            <slot :name="name" :row="slotProps.row" :value="slotProps.value" />
           </template>
-        </el-table>
+          <template #actions="{ row }">
+            <template v-for="action in actions" :key="action.schema.key">
+              <VibeElement
+                v-if="action.visible(row) && action.schema.vibe?.code && action.schema.vibe"
+                :vibe="action.schema.vibe"
+                :data="actionDataOf(action, row)"
+                :handlers="actionHandlersOf(action, row)"
+              />
+              <el-button
+                v-else-if="action.visible(row)"
+                link
+                :type="action.schema.variant === 'danger' ? 'danger' : action.schema.variant === 'warning' ? 'warning' : 'primary'"
+                :disabled="disabledOf(action, row)"
+                @click="action.run(row)"
+              >
+                {{ action.schema.label }}
+              </el-button>
+            </template>
+          </template>
+        </CrudTable>
 
         <div class="table-footer">
           <el-pagination
@@ -276,9 +267,7 @@ function actionHandlersOf(action: ReturnType<typeof resolveActions>[number], row
 .crud-layout > * { min-width: 0; }
 .crud-layout.has-side { grid-template-columns: 240px minmax(0, 1fr); }
 .crud-layout .panel { min-width: 0; overflow: hidden; }
-.crud-head { display: flex; align-items: center; gap: 6px; }
 /* 行操作换行、固定列底色与分隔线都在 table-shell.css 里统一定义，
    树表（TreePage）与普通列表页共用同一份，不要在组件里再写一遍。 */
-.crud-head h1 { display: inline-flex; align-items: center; gap: 4px; }
 @media (max-width: 900px) { .crud-layout.has-side { grid-template-columns: 1fr; } }
 </style>

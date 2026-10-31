@@ -15,6 +15,8 @@ export const routes: RouteContribution[] = [
     component: () => import('./pages/UiDrawingDesignerPage.vue'),
     title: '图纸设计器',
     permission: 'scada:screen:list',
+    // 设计器是 IDE 型页面：画布要吃满视口，不要外壳的边距与滚动。
+    meta: { fullBleed: true },
   },
   {
     name: 'ui-canvas-run',
@@ -22,6 +24,7 @@ export const routes: RouteContribution[] = [
     component: () => import('./pages/UiDrawingRunPage.vue'),
     title: '运行预览',
     permission: 'scada:screen:list',
+    meta: { fullBleed: true },
   },
 ]
 

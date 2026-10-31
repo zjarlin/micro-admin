@@ -49,6 +49,12 @@ const filteredGroups = computed(() => {
 
 const activeMenu = computed(() => route.path)
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : '工作台'))
+
+/**
+ * 全出血页面：设计器、运行预览这类「画布要吃满视口」的页面，
+ * 不要外壳的 28px 边距与滚动条——滚动交给页面自己，否则画布永远少一截。
+ */
+const fullBleed = computed(() => route.meta.fullBleed === true)
 const enabledPlugins = computed(() => kernelStore.statuses.filter((item) => item.enabled).length)
 
 onMounted(() => {
@@ -113,7 +119,9 @@ function toggleTheme(): void {
           <el-button circle text @click="ui.toggleSidebar">
             <el-icon :size="18"><Expand v-if="ui.collapsed" /><Fold v-else /></el-icon>
           </el-button>
-          <div class="breadcrumb">
+          <!-- 全出血页（设计器/运行预览）自带标题与状态，这里不再重复一条面包屑：
+                IDE 型页面每一像素都要还给画布。 -->
+          <div v-if="!fullBleed" class="breadcrumb">
             <span>控制台</span>
             <i>/</i>
             <strong>{{ pageTitle }}</strong>
@@ -157,7 +165,7 @@ function toggleTheme(): void {
         </div>
       </header>
 
-      <main class="content-area">
+      <main class="content-area" :class="{ 'is-full-bleed': fullBleed }">
         <router-view v-slot="{ Component }">
           <transition name="page-fade" mode="out-in">
             <component :is="Component" v-if="booted" :key="route.path" />
@@ -172,7 +180,9 @@ function toggleTheme(): void {
 </template>
 
 <style scoped>
-.admin-shell { min-height: 100vh; display: flex; background: var(--app-bg); color: var(--app-text); }
+/* 外壳正好一屏高：滚动条只出现在内容区内部（页面自己滚），
+   这样全出血页面（设计器画布）才能拿满「视口高度 - 顶栏」。 */
+.admin-shell { height: 100vh; min-height: 0; overflow: hidden; display: flex; background: var(--app-bg); color: var(--app-text); }
 .sidebar { width: 248px; flex: 0 0 248px; background: #0f172a; color: #cbd5e1; display: flex; flex-direction: column; transition: width .22s ease, flex-basis .22s ease; position: sticky; top: 0; height: 100vh; z-index: 20; }
 .is-collapsed .sidebar { width: 76px; flex-basis: 76px; }
 .sidebar-head { height: 76px; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid rgba(148,163,184,.12); }
@@ -197,7 +207,9 @@ function toggleTheme(): void {
 .sidebar-foot { border-top: 1px solid rgba(148,163,184,.12); padding: 12px; }
 .collapse-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 38px; border: 0; border-radius: 9px; background: rgba(148,163,184,.08); color: #94a3b8; cursor: pointer; font-size: 12px; }
 .collapse-button:hover { background: rgba(148,163,184,.14); color: #e2e8f0; }
-.main-area { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+/* 中栏铺满剩余高度、只在内容区内部滚动：全出血页面（设计器）才能正好吃满视口，
+   否则画布会按内容高度把整页撑出纵向滚动条。 */
+.main-area { min-width: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { height: 76px; flex: 0 0 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 28px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 15; backdrop-filter: blur(12px); }
 .topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .breadcrumb { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); white-space: nowrap; }
@@ -212,7 +224,10 @@ function toggleTheme(): void {
 .user-meta { display: flex; flex-direction: column; text-align: left; line-height: 1.25; }
 .user-meta strong { color: var(--app-text); font-size: 13px; }
 .user-meta small { color: var(--muted); font-size: 11px; }
-.content-area { flex: 1; padding: 28px; min-width: 0; }
+.content-area { flex: 1; padding: 28px; min-width: 0; min-height: 0; overflow: auto; }
+/* 全出血：去掉内边距并禁止外层滚动，页面内部自己排版（画布/IDE 型页面）。 */
+.content-area.is-full-bleed { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.content-area.is-full-bleed > * { flex: 1 1 auto; min-height: 0; }
 .page-skeleton { background: var(--surface); padding: 24px; border-radius: 16px; }
 .page-fade-enter-active, .page-fade-leave-active { transition: opacity .16s ease, transform .16s ease; }
 .page-fade-enter-from { opacity: 0; transform: translateY(5px); }

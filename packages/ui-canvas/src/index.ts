@@ -17,10 +17,12 @@ export type {
   UiDrawingMeta,
   UiElement,
   UiElementBinding,
+  UiElementFragment,
   UiElementProps,
   UiBindingKind,
   UiQuestion,
   UiRect,
+  UiFragmentKind,
   UiRegion,
   UiRole,
 } from './types.ts'
