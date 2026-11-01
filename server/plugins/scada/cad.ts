@@ -8,7 +8,7 @@
 // 因此这个接口**不落库**：前端先看到预览与体积对比，确认后才写画面。
 // 这样「一次导入」不会悄悄改掉用户的画面，也让 AI 补语义可以反复试。
 import { applyCommands, parseCommands, type DslDocument, type DslSymbol, type DslTag } from '@addzero/scada-dsl'
-import { importCadFile } from '../../../src/shared/scada/cad.ts'
+import { detectCadFormat, importCadFile } from '../../../src/shared/scada/cad.ts'
 import type { ScadaSymbolDefinition, ScadaTagOption } from '../../../src/shared/scada/types.ts'
 
 /** 图纸体积上限：DXF 是文本，5MB 已经是一张很密的图；再大就是误传了文件。 */
@@ -46,6 +46,13 @@ export function importCad(payload: CadImportPayload): Record<string, unknown> {
   if (isBase64) {
     const bytes = Buffer.from(raw.replace(/^data:[^,]*,/, ''), 'base64')
     if (bytes.length > MAX_SOURCE_BYTES) throw badRequest(`图纸太大（${(bytes.length / 1048576).toFixed(1)}MB），上限 5MB`)
+    // 先按字节判格式再解码：DWG 是二进制，用 UTF-8/GBK 解一遍会把魔数之后的结构破坏掉，
+    // 于是报错会变成「没有 ENTITIES 段」这种误导信息，用户根本不知道是文件类型不对。
+    const format = detectCadFormat(bytes)
+    if (format === 'dwg') {
+      throw badRequest('这是 DWG 二进制图纸：请在 CAD 里「另存为 DXF（R2000 及以上）」再导入')
+    }
+    if (format === 'binary-dxf') throw badRequest('这是二进制 DXF：请另存为 ASCII DXF 再导入')
     source = decodeBytes(bytes)
   } else {
     if (raw.length > MAX_SOURCE_BYTES) throw badRequest(`图纸太大（${(raw.length / 1048576).toFixed(1)}MB），上限 5MB`)

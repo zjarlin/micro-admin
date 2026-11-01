@@ -1,4 +1,5 @@
 <!-- CAD 图纸导入：丢一个 DXF 进来，本地解析成绘图指令集，再决定要不要让 AI 补语义。
+     DWG 只在选择文件时就按魔数拦下并给「另存为 DXF」的提示（服务端同样按字节兜底）。
      三段都在服务端完成（解析 / 应用 / 语义补全），前端只做拖放、选项与预览，
      所以「导入的几何」和「AI 画的几何」走同一个执行器，不会出现两套坐标系。 -->
 <script setup lang="ts">
@@ -8,6 +9,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import type { HttpClient } from '@/shared/http'
 import type { ScadaDocument, ScadaSymbolDefinition, ScadaTagOption } from '@/shared/scada/types'
 import { applyCad, importCad, refineCad, type CadImportView } from '@/shared/scada/cad-api'
+import { detectCadFormat } from '@/shared/scada/cad'
 
 const props = defineProps<{
   modelValue: boolean
@@ -96,20 +98,27 @@ watch(
 
 /** 读文件 → base64：统一按字节上传，编码（UTF-8 / GBK）由服务端判定。 */
 async function loadFile(file: File): Promise<void> {
-  if (/\.dwg$/i.test(file.name)) {
-    error.value = '这是 DWG 二进制文件：请在 CAD 里「另存为 DXF（R2000 及以上）」再导入'
-    return
-  }
-  if (!/\.dxf$/i.test(file.name)) {
-    error.value = `不支持的文件类型：${file.name}。请选择 .dxf 文件`
-    return
-  }
   if (file.size > MAX_BYTES) {
     error.value = `文件太大（${formatBytes(file.size)}），上限 5MB`
     return
   }
   const buffer = await file.arrayBuffer()
   const bytes = new Uint8Array(buffer)
+  // 按**字节**判格式，不看扩展名：`.dwg` 改名成 `.dxf`、浏览器给的 MIME 不准都很常见，
+  // 扩展名对不上时若不拦，等传完 5MB 才在服务端报错。
+  const format = detectCadFormat(bytes)
+  if (format === 'dwg') {
+    error.value = `这是 DWG 二进制图纸（${file.name}）：请在 CAD 里「另存为 DXF（R2000 及以上）」再导入`
+    return
+  }
+  if (format === 'binary-dxf') {
+    error.value = '这是二进制 DXF：请在 CAD 里另存为 ASCII DXF 再导入'
+    return
+  }
+  if (!/\.(dxf|dwg)$/i.test(file.name)) {
+    error.value = `不支持的文件类型：${file.name}。请选择 .dxf 文件`
+    return
+  }
   let binary = ''
   // 分块转 base64：一次性 `String.fromCharCode(...bytes)` 在 5MB 时会爆栈。
   for (let index = 0; index < bytes.length; index += 8192) {
@@ -247,7 +256,7 @@ async function applyWithAi(): Promise<void> {
           <span v-else>支持 ASCII DXF（R2000+）；DWG 请先在 CAD 里另存为 DXF</span>
         </div>
         <label class="cad-drop__pick">
-          <input type="file" accept=".dxf" @change="onPick" />
+          <input type="file" accept=".dxf,.dwg" @change="onPick" />
           选择文件
         </label>
       </div>

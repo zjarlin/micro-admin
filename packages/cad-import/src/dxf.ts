@@ -461,17 +461,38 @@ function extentsOf(entities: CadEntity[]): { min: CadPoint; max: CadPoint } | nu
 }
 
 /**
+ * 二进制格式探测：DWG 魔数 / 二进制 DXF 头。
+ *
+ * 只看**字节**，不看扩展名：用户把 `.dwg` 改名成 `.dxf`、或者浏览器给的 MIME 不准都很常见，
+ * 而 `AC10xx` 后面跟着 6 个保留字节是 DWG 的固定头部，不可能出现在 ASCII DXF 里
+ * （ASCII DXF 第 1 个字符一定是组码）。
+ *
+ * 注意这里不能对文本做 `trimStart()` 后再判 `^\0`：`AC1015\0\0` 的第 1 个字符是 `A`，
+ * 那种写法永远不成立，真实 DWG 会一路落到「没有 ENTITIES 段」的误导性报错。
+ */
+export type CadFileFormat = 'dxf' | 'dwg' | 'binary-dxf'
+
+export function detectCadFormat(bytes: Uint8Array): CadFileFormat {
+  // 头部最长要判 18 个字符（`AutoCAD Binary DXF`），别只取 16 字节。
+  const head = bytes.subarray(0, 20)
+  const ascii = (from: number, to: number): string => String.fromCharCode(...head.subarray(from, to))
+  if (/^AC10\d{2}$/.test(ascii(0, 6))) return 'dwg'
+  if (ascii(0, 18) === 'AutoCAD Binary DXF') return 'binary-dxf'
+  return 'dxf'
+}
+
+/**
  * 解析一份 DXF 文本。
  *
  * 二进制 DWG 会在这里被识别并给出可读错误（`EOF`/魔数），而不是抛一个看不懂的异常：
  * 用户丢进来的多数是 `.dwg`，提示「请另存为 DXF」比让页面白屏有用。
  */
 export function parseDxf(text: string): CadDrawing {
-  const trimmed = text.trimStart()
-  if (trimmed.startsWith('AC10') && /^\x00/.test(trimmed.slice(0, 8))) {
+  const head = text.slice(0, 18)
+  if (/^AC10\d{2}/.test(head)) {
     throw new Error('这是二进制 DWG（不是 DXF 文本）：请在 CAD 里「另存为 DXF（R2000 及以上）」再导入')
   }
-  if (trimmed.startsWith('AutoCAD Binary DXF')) {
+  if (head.startsWith('AutoCAD Binary DXF')) {
     throw new Error('这是二进制 DXF：请另存为 ASCII DXF 再导入')
   }
   const pairs = pairsOf(text)

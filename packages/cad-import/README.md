@@ -20,7 +20,8 @@ result.bytes    // { source, commands, digest }：省 token 的实测依据
 | `symbolize` | 实体 → 图元（矩形/管道/圆/三角/线段/文本 + 缩放居中 + 轴向合并） |
 | `shapesToCommands` / `shapesDigest` | 图元 → 绘图指令集 / 给模型看的摘要 |
 
-- **DWG 不支持**：二进制 DWG 会被识别并提示「请另存为 DXF（R2000 及以上）」；
+- **DWG 不解析，但按字节识别**：`detectCadFormat(bytes)` 用魔数（`AC10xx`）判 DWG / 二进制 DXF / ASCII DXF，
+  命中即提示「另存为 DXF（R2000 及以上）」——不看扩展名，改名也拦得住；
 - 编码：UTF-8 直读；GBK 图纸按字节传，由调用方用 `TextDecoder('gbk')` 解码；
 - 归类只用图元库里真实存在的 key（`basic.*` / `pipe.*`），不会产出画不出来的形状。
 
