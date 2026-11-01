@@ -1,0 +1,10 @@
+{
+  "name": "@addzero/permission-meta-demo",
+  "private": true,
+  "type": "module",
+  "description": "permission-meta 的最小可运行示例：两种标记场景 + 编译期产物 + 运行期指令",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts"
+  }
+}

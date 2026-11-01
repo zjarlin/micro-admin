@@ -1,12 +1,16 @@
 import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
+import { permissionMeta } from '@addzero/permission-meta/vite'
 import { markSourceElements, sourceLocatorPlugin } from '@addzero/source-locator/vite'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [
+      // 采集 v-meta → meta-tree.json，并把 metaId 静态注入 v-permission-meta。
+      // 必须排在 vue() 之前：它要在 configResolved 时改写 vue 的 template.compilerOptions。
+      permissionMeta({ exclude: /[\\/]packages[\\/][^\\/]+[\\/]examples[\\/]/ }),
       vue({
         // 拾取器要在浏览器里回答「这块 DOM 属于哪个组件」，这依赖 Vue 的
         // `__vueParentComponent` 与 `__file`——生产构建默认会把它们裁掉。

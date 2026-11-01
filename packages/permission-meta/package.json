@@ -1,0 +1,30 @@
+{
+  "name": "@addzero/permission-meta",
+  "version": "0.1.0",
+  "description": "编译期把 Vue3 template 的 v-meta 采集成树形权限元数据（meta-tree.json），并把 metaId 静态注入运行期 v-permission-meta 指令；业务组件按黑盒处理，运行时零开销",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "volar.d.ts",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./vite": "./src/vite.ts",
+    "./meta": "./src/meta.ts",
+    "./runtime": "./src/runtime.ts",
+    "./volar": {
+      "types": "./volar.d.ts"
+    }
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vite": "^7.0.0 || ^8.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "demo": "vite --config examples/vite.config.ts",
+    "demo:build": "vite build --config examples/vite.config.ts"
+  }
+}

@@ -13,3 +13,7 @@ coverage/
 # 部署机本地默认值（含端口与数据目录），模板见 deploy/.env.example
 deploy/.env
 .env
+
+# permission-meta：编译期产物（每个项目自己生成，不进仓库）
+meta-tree.json
+packages/*/examples/dist/

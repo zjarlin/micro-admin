@@ -5,9 +5,11 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { installDataPage } from '@addzero/data-page-element'
+import { installPermissionMeta } from '@addzero/permission-meta/runtime'
 import { bootKernel, installPluginRoutes, router } from './router'
 import { createRuntime, RUNTIME_KEY } from './shared/service'
 import { http } from './shared/api'
+import { useSessionStore } from './stores/session'
 import { useUiStore } from './stores/ui'
 import { applyTheme, loadTheme } from './shared/theme'
 import 'element-plus/dist/index.css'
@@ -33,6 +35,9 @@ async function bootstrap(): Promise<void> {
   ))
 
   installDataPage(app, { transport: http })
+  // v-permission-meta：metaId 在编译期已静态写进指令参数，这里只提供当前会话的授权集合。
+  // 本项目的 metaId 直接沿用权限码（如 `monitor:server:view`），后台可据 meta-tree.json 配置。
+  installPermissionMeta(app, { granted: () => useSessionStore().permissions })
   app.use(router)
   app.use(ElementPlus, { locale: zhCn as never })
   for (const [name, component] of Object.entries(ElementPlusIconsVue)) app.component(name, component)

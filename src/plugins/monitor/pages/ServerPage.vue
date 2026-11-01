@@ -18,16 +18,20 @@ onMounted(() => void load())
 
 <template>
   <div class="page">
-    <header class="page-head"><div><h1>服务监控</h1><p>主机与运行时资源快照。真实部署时可替换为 Prometheus 或系统探针接口。</p></div><el-button @click="load">刷新</el-button></header>
+    <!-- v-meta 是采集标记：只产元数据，编译后从产物移除，不影响页面渲染。 -->
+    <header class="page-head" v-meta="{ name: '监控页头', desc: '标题、说明与刷新按钮', group: 'monitor' }">
+      <div><h1>服务监控</h1><p>主机与运行时资源快照。真实部署时可替换为 Prometheus 或系统探针接口。</p></div>
+      <el-button @click="load" v-meta:id="'monitor:server:view'" v-permission-meta>刷新</el-button>
+    </header>
     <el-skeleton v-if="loading && !metric" :rows="5" animated />
     <template v-else-if="metric">
-      <div class="metric-grid">
+      <div class="metric-grid" v-meta="{ name: '资源指标卡', desc: 'CPU / 内存 / 磁盘 / 负载', group: 'monitor' }">
         <article class="metric-card"><span>CPU 使用率</span><strong>{{ metric.cpu }}<small class="unit">%</small></strong><el-progress :percentage="metric.cpu" :show-text="false" :stroke-width="6" status="success" /></article>
         <article class="metric-card"><span>内存使用率</span><strong>{{ metric.memory }}<small class="unit">%</small></strong><el-progress :percentage="metric.memory" :show-text="false" :stroke-width="6" /></article>
         <article class="metric-card"><span>磁盘使用率</span><strong>{{ metric.disk }}<small class="unit">%</small></strong><el-progress :percentage="metric.disk" :show-text="false" :stroke-width="6" status="warning" /></article>
         <article class="metric-card"><span>系统负载</span><strong class="load">{{ metric.load.join(' / ') }}</strong><small>1 / 5 / 15 分钟</small></article>
       </div>
-      <div class="server-grid">
+      <div class="server-grid" v-meta="{ name: '主机与运行提示', group: 'monitor' }">
         <section class="panel">
           <div class="panel-title"><h2>主机信息</h2><span>{{ formatDateTime(metric.updatedAt) }}</span></div>
           <dl class="server-dl">
