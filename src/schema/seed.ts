@@ -21,12 +21,44 @@ const DEPARTMENT_SEED: Row[] = [
   { id: 6, name: '市场运营部', parentId: 1, leader: '何川', phone: '020-88001239', status: 'active' },
 ]
 
+/**
+ * 角色的菜单授权：`menuIds` 是勾选结果（含父级目录，便于回显成树），
+ * `permissions` 是它能派生的权限码。
+ *
+ * 两者都存下来而不是每次现算：权限码是对外契约（路由/按钮/接口都按它判定），
+ * 授权面板保存时一次写定，服务端读会话时直接用，不必每请求跑一遍菜单表。
+ */
 const ROLE_SEED: Row[] = [
-  { id: 1, name: '超级管理员', code: 'admin', description: '拥有全部权限，不受菜单与数据范围限制', status: 'active', userCount: 1, createdAt: iso(-420) },
-  { id: 2, name: '系统管理员', code: 'system', description: '维护用户、角色、菜单与参数', status: 'active', userCount: 4, createdAt: iso(-360) },
-  { id: 3, name: '审计员', code: 'auditor', description: '只读查看日志、在线用户与服务器状态', status: 'active', userCount: 3, createdAt: iso(-300) },
-  { id: 4, name: '运营专员', code: 'operator', description: '公告、字典与日常配置维护', status: 'active', userCount: 6, createdAt: iso(-240) },
-  { id: 5, name: '访客', code: 'guest', description: '仅可访问工作台只读看板', status: 'disabled', userCount: 0, createdAt: iso(-180) },
+  {
+    id: 1, name: '超级管理员', code: 'admin', description: '拥有全部权限，不受菜单与数据范围限制',
+    status: 'active', userCount: 1, createdAt: iso(-420),
+    menuIds: [1, 11, 12, 13, 14, 15, 2, 21, 22, 23, 3, 31, 32, 33, 34],
+    permissions: ['*:*:*'],
+  },
+  {
+    id: 2, name: '系统管理员', code: 'system', description: '维护用户、角色、菜单与参数',
+    status: 'active', userCount: 4, createdAt: iso(-360),
+    menuIds: [1, 11, 12, 13, 14, 15, 2, 22],
+    permissions: ['system:user:list', 'system:role:list', 'system:menu:list', 'system:dept:list', 'system:post:list', 'system:config:list'],
+  },
+  {
+    id: 3, name: '审计员', code: 'auditor', description: '只读查看日志、在线用户与服务器状态',
+    status: 'active', userCount: 3, createdAt: iso(-300),
+    menuIds: [1, 11, 12, 3, 31, 33],
+    permissions: ['system:user:list', 'system:role:list', 'monitor:online:list', 'monitor:server:view'],
+  },
+  {
+    id: 4, name: '运营专员', code: 'operator', description: '公告、字典与日常配置维护',
+    status: 'active', userCount: 6, createdAt: iso(-240),
+    menuIds: [2, 21, 22, 23],
+    permissions: ['system:dict:list', 'system:config:list', 'system:notice:list'],
+  },
+  {
+    id: 5, name: '访客', code: 'guest', description: '仅可访问工作台只读看板',
+    status: 'disabled', userCount: 0, createdAt: iso(-180),
+    menuIds: [],
+    permissions: [],
+  },
 ]
 
 const USERNAMES = [

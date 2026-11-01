@@ -200,7 +200,21 @@ export interface Condition {
 }
 
 /** 行操作语义：`kind` 决定前端走哪条内置分支。 */
-export type ActionKind = 'create' | 'edit' | 'delete' | 'toggle' | 'detail' | 'request'
+export type ActionKind =
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'toggle'
+  | 'detail'
+  | 'request'
+  /**
+   * 交回宿主页面自己处理：点「授权菜单」这类需要自定义弹层/画布的动作时用它。
+   *
+   * 声明式动作只覆盖「确认 + 请求」的通用形态；一旦交互要自己画（树形勾选、
+   * 可视化编辑），硬塞进 schema 只会长出第二套渲染逻辑。宿主监听页面的
+   * `action` 事件即可，schema 里只保留入口按钮。
+   */
+  | 'custom'
 
 export interface ActionSchema {
   key: string

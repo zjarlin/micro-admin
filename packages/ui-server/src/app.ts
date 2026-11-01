@@ -22,6 +22,8 @@ import {
   type PageRegistry,
   type PageStore,
   type RuntimeStore,
+  type SessionResolver,
+  type SessionUser,
 } from '@addzero/data-page'
 
 /**
@@ -103,6 +105,13 @@ export interface AppDeps {
   /** 页面配置写权限码，缺省 `system:page:config`。 */
   schemaWritePermission?: string | undefined
   /**
+   * 会话解析：把静态令牌用户换成按角色授权计算的权限。
+   *
+   * 通用层不认识宿主的角色/菜单表，所以「谁能看到什么」这条策略由宿主注入；
+   * 返回 `null` 表示不接管。每次请求都会调用，改完授权不必重启。
+   */
+  resolveUser?: SessionResolver | undefined
+  /**
    * 免登录读取的扩展路径（例如外观主题要在登录页之前生效）。
    * 只放前言/外观这类不含业务数据的 GET 接口，其余仍走令牌。
    */
@@ -153,7 +162,14 @@ export function createApp(deps: AppDeps): CreatedApp {
     store: deps.pages,
     ...(deps.seed ? { seed: deps.seed } : {}),
   })
-  const runtime = createRuntimeApi(engine, deps.runtime)
+  const runtime = createRuntimeApi(
+    engine,
+    deps.runtime,
+    deps.resolveUser ? { resolveUser: deps.resolveUser } : {},
+  )
+  /** 鉴权与扩展共用同一份解析结果，避免「路由放行、扩展里另算一套」。 */
+  const asSession = (user: SessionUser | null): SessionUser | null =>
+    user && deps.resolveUser ? (deps.resolveUser(user) ?? user) : user
   const extensions = deps.extensions ?? []
   const app = new Hono()
   const writePermission = deps.schemaWritePermission ?? SCHEMA_WRITE_PERMISSION
@@ -188,7 +204,7 @@ export function createApp(deps: AppDeps): CreatedApp {
     // 页面清单公开只读：宿主要在建路由之前知道有哪些页面。
     // 业务数据接口仍然逐个校验令牌。
     const isPublic = isPublicPath(path, method) || (method === 'GET' && (deps.publicPaths ?? []).includes(path))
-    const user = isPublic ? null : authenticate(token)
+    const user = isPublic ? null : asSession(authenticate(token))
     if (!isPublic && !user) {
       return c.json(envelope(null, 401, '登录已失效，请重新登录'), 401)
     }

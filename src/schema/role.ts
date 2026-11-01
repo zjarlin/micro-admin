@@ -22,6 +22,9 @@ export const rolePage: CrudPageSchema = {
     { prop: 'name', label: '角色名称', minWidth: 140 },
     { prop: 'code', label: '权限字符', width: 140, cell: 'code' },
     { prop: 'description', label: '描述', minWidth: 240 },
+    // 授权结果不在表单里编辑，用页面插槽按「已授权菜单数 / 权限码数」渲染：
+    // schema 只声明「这一列交给宿主画」，勾选交互在 RoleMenuAuthorize.vue 里。
+    { prop: 'menuIds', label: '授权菜单', width: 120, cell: 'custom', slot: 'authorize-cell' },
     { prop: 'userCount', label: '用户数', width: 90 },
     {
       prop: 'status',
@@ -45,6 +48,29 @@ export const rolePage: CrudPageSchema = {
         { label: '正常', value: 'active' },
         { label: '停用', value: 'disabled' },
       ],
+    },
+  ],
+  // 声明了 actions 就整体替换默认的「编辑 / 删除」，所以这里把两个默认动作一并写上。
+  // `authorize` 是 `kind: 'custom'`：按钮出现在行上，弹层由页面自己渲染。
+  actions: [
+    {
+      key: 'authorize',
+      label: '授权菜单',
+      variant: 'primary',
+      kind: 'custom',
+      permission: 'system:role:authorize',
+      // admin 用通配权限，改菜单授权对它没有意义，禁用避免误以为能收窄超管。
+      disabledWhen: { prop: 'code', op: 'eq', value: 'admin' },
+    },
+    { key: 'edit', label: '编辑', kind: 'edit' },
+    {
+      key: 'remove',
+      label: '删除',
+      variant: 'danger',
+      kind: 'delete',
+      permission: 'system:role:remove',
+      // 内置角色（有用户在用）不允许删，前后端同一份声明。
+      disabledWhen: { prop: 'userCount', op: 'truthy' },
     },
   ],
 }
