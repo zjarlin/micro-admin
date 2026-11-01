@@ -94,7 +94,7 @@ function robustBounds(boxes: Box[], warnings: string[]): { box: Box; clipped: bo
   }
   const kept = boxes.filter((box) => !escapes(box, slack))
   const frame = unionBox(kept.length > 0 ? kept : [core])
-  warnings.push(`有少量实体离图纸主体超过 ${Math.round(ratio)} 倍远，已按主体范围取景（这些图元不会出现在画面里）`)
+  warnings.push(`有少量实体离图纸主体超过 ${Math.round(ratio)} 倍远，已按主体范围取景（这类离群图元不进画面）`)
   return { box: frame, clipped: true }
 }
 
@@ -563,7 +563,7 @@ export function symbolize(entities: CadEntity[], options: CadSymbolizeOptions = 
     byKind.text = (byKind.text ?? 0) + 1
   }
 
-  if (clipped > 0) warnings.push(`${clipped} 个实体在取景范围外，已略过`)
+  if (clipped > 0) warnings.push(`${clipped} 个实体在取景范围外（多半是画错或缩放异常的图元），已略过`)
 
   // 数量上限：按面积取大者（小标注线先丢），避免一张密集图纸把画布塞满。
   let dropped = clipped

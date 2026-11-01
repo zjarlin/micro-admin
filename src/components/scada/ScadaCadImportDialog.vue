@@ -231,7 +231,7 @@ async function applyWithAi(): Promise<void> {
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="导入 CAD 图纸（DXF → 组态画面）"
+    title="导入 CAD 图纸（DXF / DWG → 组态画面）"
     width="920px"
     top="5vh"
     append-to-body

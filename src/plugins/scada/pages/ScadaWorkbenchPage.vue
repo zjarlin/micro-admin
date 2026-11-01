@@ -707,7 +707,7 @@ function exportSvg(): void {
 
         <!-- 导入图纸：丢一个 DXF 进来，服务端本地解析成绘图指令集（不花 token），
              确认后才写画面；要不要 AI 补语义由用户在对话框里选。 -->
-        <el-tooltip content="导入 CAD 图纸（DXF）→ 组态画面" placement="bottom" :show-after="400">
+        <el-tooltip content="导入 CAD 图纸（DXF / DWG）→ 组态画面" placement="bottom" :show-after="400">
           <el-button size="small" :icon="Upload" aria-label="导入 CAD 图纸" :disabled="loading" @click="cadImportVisible = true" />
         </el-tooltip>
 
