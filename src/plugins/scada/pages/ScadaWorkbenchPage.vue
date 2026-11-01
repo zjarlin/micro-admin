@@ -6,7 +6,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bottom, Delete, DocumentAdd, Download, Operation, Refresh, RefreshRight, Sort, Top } from '@element-plus/icons-vue'
+import { Bottom, Delete, DocumentAdd, Download, Operation, Refresh, RefreshRight, Sort, Top, Upload } from '@element-plus/icons-vue'
 import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
 import type {
@@ -26,6 +26,7 @@ import ScadaInspector from '@/components/scada/ScadaInspector.vue'
 import ScadaSymbolPalette from '@/components/scada/ScadaSymbolPalette.vue'
 import ScadaShapeStrip from '@/components/scada/ScadaShapeStrip.vue'
 import ScadaTagPicker from '@/components/scada/ScadaTagPicker.vue'
+import ScadaCadImportDialog from '@/components/scada/ScadaCadImportDialog.vue'
 import { RIGHT_PANEL_HOST_ID, closeRightPanel, openRightPanel, updateRightPanel, useRightPanel } from '@/shared/shell'
 import { getKernel } from '@/router'
 import { attachScadaWorkbench, toggleScadaPanel, useScadaWorkbench, SCADA_PANEL_ID } from '../workbench'
@@ -65,6 +66,8 @@ const dirty = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const tagPickerVisible = ref(false)
+/** CAD 图纸导入对话框：图纸解析与指令生成都在服务端，页面只负责打开与写回。 */
+const cadImportVisible = ref(false)
 const tagPickerSlot = ref<string | null>(null)
 const loadError = ref<string | null>(null)
 const canvasHost = ref<HTMLElement | null>(null)
@@ -609,6 +612,21 @@ function clearBinding(slot: string): void {
   dirty.value = true
 }
 
+// ---------------- CAD 导入 ----------------
+
+/**
+ * 导入结果 → 画布。
+ *
+ * 图纸就是这张画面：直接替换图元列表，保留画面名称与文档版本。
+ * 不自动保存——与工具条其它改动一致，用户点「保存」才算落库。
+ */
+function applyCadDocument(next: ScadaDocument): void {
+  document.value = { ...next, canvas: { ...next.canvas, showGrid: document.value.canvas.showGrid } }
+  selectedIds.value = []
+  dirty.value = true
+  void nextTick(() => fitToView())
+}
+
 // ---------------- 视图 ----------------
 
 /**
@@ -684,6 +702,14 @@ function exportSvg(): void {
             </template>
           </el-dropdown>
         </div>
+
+        <span class="scada-divider" />
+
+        <!-- 导入图纸：丢一个 DXF 进来，服务端本地解析成绘图指令集（不花 token），
+             确认后才写画面；要不要 AI 补语义由用户在对话框里选。 -->
+        <el-tooltip content="导入 CAD 图纸（DXF）→ 组态画面" placement="bottom" :show-after="400">
+          <el-button size="small" :icon="Upload" aria-label="导入 CAD 图纸" :disabled="loading" @click="cadImportVisible = true" />
+        </el-tooltip>
 
         <span class="scada-divider" />
 
@@ -877,6 +903,15 @@ function exportSvg(): void {
         </el-tab-pane>
       </el-tabs>
     </Teleport>
+
+    <ScadaCadImportDialog
+      v-model="cadImportVisible"
+      :http="http"
+      :document="document"
+      :symbols="symbols"
+      :tags="tagOptions"
+      @apply="applyCadDocument"
+    />
 
     <ScadaTagPicker
       v-model="tagPickerVisible"

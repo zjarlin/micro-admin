@@ -8,9 +8,14 @@
 
 后台页面是**配置驱动**的：一份 schema 描述查询、列、表单、行操作与左树，前端不需要为每个页面写 `.vue`，后端用同一个引擎提供列表与增删改查。仓库自带 TypeScript 后端（Hono + `node:sqlite`），`node server/main.ts` 即可独立运行。
 
-通用层已抽成四个可被别的项目直接依赖的工作区包：`@addzero/data-page`（契约/引擎/状态机）、
+通用层已抽成可被别的项目直接依赖的工作区包：`@addzero/data-page`（契约/引擎/状态机）、
 `@addzero/data-page-element`（Element Plus 壳）、`@addzero/ui-server`（HTTP + SQLite）、
 `@addzero/app-frame`（三栏布局与 `layout` 面板服务）。详见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
+
+组态相关的三个包同样是「能单独搬走」的：`@addzero/scada-dsl`（绘图指令集：语法/解析/执行/文档摘要）、
+`@addzero/ifc-canvas`（画面 → IFC4 BIM）、`@addzero/cad-import`（DXF 图纸 → 组态图元 + 绘图指令集）。
+详见 [`docs/SCADA-CANVAS.md`](docs/SCADA-CANVAS.md)、[`docs/SCADA-IFC.md`](docs/SCADA-IFC.md)、
+[`docs/CAD-IMPORT.md`](docs/CAD-IMPORT.md)。
 
 演示账号：
 

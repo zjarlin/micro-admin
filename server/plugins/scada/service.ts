@@ -12,6 +12,7 @@ import {
   type ExtrusionPlan,
 } from '../../../src/shared/scada/ifc.ts'
 import { aiStatusOf, requestExtrusionDecisions, type ExtrusionAiOptions } from './ai.ts'
+import { applyCadCommands, importCad } from './cad.ts'
 import {
   createEmptyScadaDocument,
   parseScadaDocument,
@@ -320,6 +321,18 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
         state.screens = state.screens.filter((screen) => screen.id !== screenId)
         save(state)
         return { deleted: before - state.screens.length }
+      }
+
+      // ---------------- CAD 图纸导入（DXF → 绘图指令集） ----------------
+
+      if (path === '/scada/cad/import' && method === 'POST') {
+        // 不落库：前端先预览指令与体积对比，确认后再写画面。
+        return importCad(body)
+      }
+
+      if (path === '/scada/cad/apply' && method === 'POST') {
+        // 与 /ai/draw 同一个执行器：CAD 导入的画面和 AI 画的画面语义一致。
+        return applyCadCommands(body, options.symbols, options.tags)
       }
 
       if (path === '/scada/validate' && method === 'POST') {

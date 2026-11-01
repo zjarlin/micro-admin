@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "pnpm build:packages && vue-tsc -b && vite build",
-    "build:packages": "pnpm --filter @addzero/data-page build && pnpm --filter @addzero/ui-server build && pnpm --filter @addzero/scada-dsl build && pnpm --filter @addzero/ifc-canvas build",
+    "build:packages": "pnpm --filter @addzero/data-page build && pnpm --filter @addzero/ui-server build && pnpm --filter @addzero/scada-dsl build && pnpm --filter @addzero/ifc-canvas build && pnpm --filter @addzero/cad-import build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "vue-tsc -b",
     "test": "vitest run",
@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@addzero/app-frame": "workspace:*",
+    "@addzero/cad-import": "workspace:*",
     "@addzero/data-page": "workspace:*",
     "@addzero/data-page-element": "workspace:*",
     "@addzero/ifc-canvas": "workspace:*",

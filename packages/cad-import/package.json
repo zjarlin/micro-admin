@@ -1,0 +1,42 @@
+{
+  "name": "@addzero/cad-import",
+  "version": "0.1.0",
+  "description": "CAD 图纸（DXF）→ 组态画布：实体解析、图元归类与绘图指令集生成（无 UI 依赖，可单独发布）",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./dxf": "./src/dxf.ts",
+    "./symbolize": "./src/symbolize.ts",
+    "./digest": "./src/commands.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./dxf": {
+        "types": "./dist/dxf.d.ts",
+        "default": "./dist/dxf.js"
+      },
+      "./symbolize": {
+        "types": "./dist/symbolize.d.ts",
+        "default": "./dist/symbolize.js"
+      },
+      "./digest": {
+        "types": "./dist/commands.d.ts",
+        "default": "./dist/commands.js"
+      }
+    }
+  }
+}

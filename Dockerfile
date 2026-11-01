@@ -19,6 +19,7 @@ COPY packages/ui-server/package.json packages/ui-server/
 COPY packages/app-frame/package.json packages/app-frame/
 COPY packages/scada-dsl/package.json packages/scada-dsl/
 COPY packages/ifc-canvas/package.json packages/ifc-canvas/
+COPY packages/cad-import/package.json packages/cad-import/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build:packages && pnpm build

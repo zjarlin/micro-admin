@@ -93,10 +93,17 @@ export function createAiPlugin(options: AiPluginOptions): AiPlugin {
   }))
   const dslTags: DslTag[] = options.tags.map((tag) => ({ tagId: tag.tagId, name: tag.name, unit: null }))
 
-  function drawContext(document: DslDocument): Record<string, string> {
+  /**
+   * 绘图提示词的上下文。
+   *
+   * `digest` 只给 CAD 导入用：图纸已由本地解析器压成几十行摘要，模型读摘要而不是读 DXF，
+   * 这是「省 token」的第二道闸门（第一道是本地解析，压根不发给模型）。
+   */
+  function drawContext(document: DslDocument, digest = ''): Record<string, string> {
     const stats = layoutStats(document)
     return {
       catalog: opsCatalogMarkdown(),
+      digest: digest || '（本次没有图纸摘要：按当前画面自行判断）',
       refs: REF_HELP,
       document: describeDocument(document, { symbols: dslSymbols, tags: dslTags }),
       symbols: symbolLines(options.symbols),
@@ -173,7 +180,9 @@ export function createAiPlugin(options: AiPluginOptions): AiPlugin {
         }
         const promptId = asString(body.promptId, 'scada.draw')
         const promptRecord = prompts.get(promptId)
-        const instructions = prompts.render(promptId, drawContext(document))
+        // 图纸摘要只可能来自 CAD 导入（前端传上来），这里不读文件、不重新解析。
+        const digest = asString(body.digest).slice(0, 6000)
+        const instructions = prompts.render(promptId, drawContext(document, digest))
         if (!instructions || !promptRecord) throw Object.assign(new Error(`提示词 "${promptId}" 不存在`), { status: 404 })
 
         const started = Date.now()

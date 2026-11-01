@@ -29,6 +29,9 @@
       "path": "./packages/ifc-canvas"
     },
     {
+      "path": "./packages/cad-import"
+    },
+    {
       "path": "./packages/nav-tree"
     },
     {
