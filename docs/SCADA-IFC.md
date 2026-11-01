@@ -20,7 +20,7 @@ ScadaDocument ──resolveWidget──▶ 零件场景（绝对像素）
 
 | 文件 | 说明 |
 | --- | --- |
-| `packages/ifc-canvas/src/symbols3d.ts` | 15 个内置图元的规则表：厚度策略、离地高度、材质、几何形式（拉伸/圆柱/壳体/管道/贴面）、部件级覆盖 |
+| `packages/ifc-canvas/src/symbols3d.ts` | 18 个内置图元的规则表（线段按 `form: skip` 跳过——开放折线拉伸无意义）：厚度策略、离地高度、材质、几何形式（拉伸/圆柱/壳体/管道/贴面）、部件级覆盖 |
 | `packages/ifc-canvas/src/plan.ts` | 场景 → 3D 计划；缺失字段汇总成 `aiRequest`；同图元同部件的决策进缓存 |
 | `packages/ifc-canvas/src/writer.ts` | IFC4 SPF：`IFCPROJECT→IFCSITE→IFCBUILDING→IFCBUILDINGSTOREY` + `IFCEXTRUDEDAREASOLID` + 属性集 |
 | `packages/ifc-canvas/src/isometric.ts` | 等轴测投影（`screenX=(x-y)cos`、`screenY=(x+y)sin-z`），面片按深度排序上色 |

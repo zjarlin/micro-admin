@@ -12,9 +12,11 @@
 | `src/shared/scada/render.ts` | 几何、吸附、对齐、槽位求值（纯函数，无 DOM） | `.../screens/scada/composables/scada-render.ts` |
 | `src/shared/scada/symbols.ts` | 图元解析 + 稀疏字段补齐 + 索引（前后端共用） | 新增 |
 | `src/shared/scada/library.ts` | 浏览器侧图元库入口（JSON 由 Vite 解析） | 新增 |
-| `src/assets/scada/builtin-symbols.json` | 图元库唯一数据源（15 个内置图元） | `okmy_dics/creates/az-scada-canvas/builtin-symbols.json` |
+| `src/assets/scada/builtin-symbols.json` | 图元库唯一数据源（18 个内置图元，含线段/圆椭圆/三角形） | `okmy_dics/creates/az-scada-canvas/builtin-symbols.json` |
+| `src/shared/scada/glyph.ts` | 图元 → 工具条小图标的字形（复用画布同一条求值链，不手绘图标） | 新增 |
 | `src/components/scada/ScadaCanvas.vue` | SVG 渲染 + 选择/拖动/缩放/旋转/框选/吸附 | `.../views/ScadaCanvas.vue` |
-| `src/components/scada/ScadaSymbolPalette.vue` | 图元库面板（分类/搜索/点击或拖入） | 同上 |
+| `src/components/scada/ScadaSymbolPalette.vue` | 图元库面板（分类/搜索/点击或拖入，列表项带同一份字形） | 同上 |
+| `src/components/scada/ScadaShapeStrip.vue` | 工具条「基础图形」那排小图标（CAD/PS 风格）：点一下落到空位，拖到画布落到指定位置 | 新增 |
 | `src/components/scada/ScadaInspector.vue` | 属性、几何、变量绑定、阈值 | 同上 |
 | `src/components/scada/ScadaTagPicker.vue` | 通道变量选择器 | 同上 |
 | `src/plugins/scada/pages/ScadaWorkbenchPage.vue` | 工作台编排：资源轨（画面 + 图元库）+ 画布；属性面板 Teleport 到外壳右栏 | 由 `ScadaScene.vue` 精简重写 |
@@ -50,6 +52,12 @@ POST /scada/preview                   → { svg, issues, missingTagIds }
    服务端预览与桌面端导出依赖 Tauri/本地采集器，不属于本后台；导出改为序列化画布 SVG。
 3. **画面维度简化为演示工程**：`PROJECT_ID = 1`，接入真实工程上下文时由路由参数注入。
 4. **打开画面自动按容器宽度缩放**：1920 宽画布在窄栏里会裁掉右侧图元，另提供「适应宽度」。
+5. **基础图形上工具条**：`线段 / 圆椭圆 / 三角形 / 矩形 / 文本` 除留在图元库外，另以一排 26px 图标按钮出现在工作台工具条上。
+   图标**不是手绘图标集**，由 `symbolGlyph()` 复用画布同一条求值链（`buildScene` → 绘制图元）把图元定义缩成 18px 字形，
+   所以「放下去的东西」和图标永远同形，新增基础图形会自动多一格图标，不存在「加了图元忘了加图标」。
+   图标是单色 `currentColor`（CAD/Photoshop 的规矩：图标表示工具不表示配色），并做了两处 18px 取舍：
+   面板类图元只画外形不画字（180×72 里的 28px 字缩到 18px 等于没有），纯文字图元（`文本`）反过来按内容宽度拟合字号。
+   放到画布上有两条路径：点一下按栅格落在第一个空位；从图标拖到画布则落在指针位置（按图元中心对齐，除以缩放后取整到栅格）。
 
 ## 校验
 

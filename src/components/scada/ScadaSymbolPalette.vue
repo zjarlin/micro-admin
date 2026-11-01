@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import type { ScadaSymbolCategory, ScadaSymbolDefinition } from '@/shared/scada/types'
+import { symbolGlyph } from '@/shared/scada/glyph'
 
 const props = defineProps<{
   symbols: ScadaSymbolDefinition[]
@@ -39,8 +40,18 @@ const filtered = computed(() => {
   )
 })
 
+// 字形表先于 groups 定义：groups 的 getter 会读它（顺序错了就是 TDZ 报错）。
+const GLYPH_SIZE = 16
+
+/** 列表项字形：与工具条同一份 `symbolGlyph`，两处图标永远一致。 */
+const glyphByKey = computed(() => {
+  const map: Record<string, ReturnType<typeof symbolGlyph>> = {}
+  for (const symbol of props.symbols) map[symbol.key] = symbolGlyph(symbol, GLYPH_SIZE)
+  return map
+})
+
 const groups = computed(() => {
-  const order: ScadaSymbolCategory[] = ['instrument', 'control', 'machine', 'vessel', 'pipe', 'basic', 'custom']
+  const order: ScadaSymbolCategory[] = ['basic', 'instrument', 'control', 'machine', 'vessel', 'pipe', 'custom']
   const map = new Map<ScadaSymbolCategory, ScadaSymbolDefinition[]>()
   for (const symbol of filtered.value) {
     const list = map.get(symbol.category) ?? []
@@ -49,7 +60,14 @@ const groups = computed(() => {
   }
   return order
     .filter((category) => (map.get(category)?.length ?? 0) > 0)
-    .map((category) => ({ category, label: CATEGORY_LABELS[category] ?? category, items: map.get(category)! }))
+    .map((category) => ({
+      category,
+      label: CATEGORY_LABELS[category] ?? category,
+      items: (map.get(category) ?? []).map((symbol) => ({
+        symbol,
+        glyph: glyphByKey.value[symbol.key] ?? null,
+      })),
+    }))
 })
 
 function toggle(category: ScadaSymbolCategory) {
@@ -82,21 +100,56 @@ function onDragStart(event: DragEvent, symbol: ScadaSymbolDefinition) {
         </button>
         <div v-show="!collapsed[group.category]" class="scada-palette__items">
           <button
-            v-for="symbol in group.items"
-            :key="symbol.key"
+            v-for="item in group.items"
+            :key="item.symbol.key"
             type="button"
             class="scada-palette__item"
-            :title="symbol.description ?? symbol.key"
+            :title="item.symbol.description ?? item.symbol.key"
             draggable="true"
-            @click="emit('add', symbol)"
-            @dragstart="onDragStart($event, symbol)"
+            @click="emit('add', item.symbol)"
+            @dragstart="onDragStart($event, item.symbol)"
           >
-            <span class="scada-palette__item-name">{{ symbol.name }}</span>
-            <span class="scada-palette__item-size">
-              {{ Math.round(symbol.defaultWidth) }}×{{ Math.round(symbol.defaultHeight) }}
-            </span>
-            <span v-if="symbol.bindingSlots.length" class="scada-palette__item-slot">
-              {{ symbol.bindingSlots.length }} 绑定
+            <svg
+              v-if="item.glyph"
+              class="scada-palette__glyph"
+              :width="item.glyph.size"
+              :height="item.glyph.size"
+              :viewBox="`0 0 ${item.glyph.size} ${item.glyph.size}`"
+              aria-hidden="true"
+            >
+              <g :transform="item.glyph.transform">
+                <template v-for="(part, index) in item.glyph.primitives" :key="index">
+                  <text
+                    v-if="part.kind === 'text'"
+                    :x="part.x"
+                    :y="part.y"
+                    :font-size="part.fontSize"
+                    :font-weight="part.bold ? 700 : 400"
+                    fill="currentColor"
+                    text-anchor="middle"
+                  >{{ part.text }}</text>
+                  <path
+                    v-else
+                    :d="part.d"
+                    :fill="part.fill"
+                    :fill-opacity="part.fillOpacity"
+                    :stroke="part.stroke ?? undefined"
+                    :stroke-width="part.stroke ? part.strokeWidth : undefined"
+                    :transform="part.transform ?? undefined"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                </template>
+              </g>
+            </svg>
+            <span class="scada-palette__item-text">
+              <span class="scada-palette__item-name">{{ item.symbol.name }}</span>
+              <span class="scada-palette__item-size">
+                {{ Math.round(item.symbol.defaultWidth) }}×{{ Math.round(item.symbol.defaultHeight) }}
+              </span>
+              <span v-if="item.symbol.bindingSlots.length" class="scada-palette__item-slot">
+                {{ item.symbol.bindingSlots.length }} 绑定
+              </span>
             </span>
           </button>
         </div>
@@ -160,9 +213,9 @@ function onDragStart(event: DragEvent, symbol: ScadaSymbolDefinition) {
 
 .scada-palette__item {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 6px 8px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
   border: 1px solid var(--card-border, rgba(255, 255, 255, 0.08));
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
@@ -174,6 +227,23 @@ function onDragStart(event: DragEvent, symbol: ScadaSymbolDefinition) {
 .scada-palette__item:hover {
   border-color: rgba(56, 189, 248, 0.5);
   background: rgba(56, 189, 248, 0.1);
+}
+
+.scada-palette__glyph {
+  display: block;
+  flex: none;
+  color: var(--muted-text, #8d98b2);
+}
+
+.scada-palette__item:hover .scada-palette__glyph {
+  color: #38bdf8;
+}
+
+.scada-palette__item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .scada-palette__item-name {

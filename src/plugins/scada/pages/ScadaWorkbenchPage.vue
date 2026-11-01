@@ -24,6 +24,7 @@ import { referencedTagIds } from '@/shared/scada/render'
 import ScadaCanvas from '@/components/scada/ScadaCanvas.vue'
 import ScadaInspector from '@/components/scada/ScadaInspector.vue'
 import ScadaSymbolPalette from '@/components/scada/ScadaSymbolPalette.vue'
+import ScadaShapeStrip from '@/components/scada/ScadaShapeStrip.vue'
 import ScadaTagPicker from '@/components/scada/ScadaTagPicker.vue'
 import { RIGHT_PANEL_HOST_ID, closeRightPanel, openRightPanel, updateRightPanel, useRightPanel } from '@/shared/shell'
 import { getKernel } from '@/router'
@@ -77,6 +78,14 @@ const symbolMap = computed(() => {
   for (const symbol of symbols.value) map[symbol.key] = symbol
   return map
 })
+
+/**
+ * 基础图形：工具条上那一排小图标。
+ *
+ * 取自图元库自身（`category === 'basic'`），不在页面里再写一份 key 清单——
+ * 加一个基础图元，工具条自动多一格。
+ */
+const basicSymbols = computed(() => symbols.value.filter((symbol) => symbol.category === 'basic'))
 
 const tagById = computed(() => {
   const map = new Map<number, ScadaTagOption>()
@@ -472,9 +481,19 @@ function findFreeSpot(width: number, height: number, grid: number): { x: number;
   return { x: startX, y: startY }
 }
 
-function addSymbol(symbol: ScadaSymbolDefinition): void {
+/**
+ * 加点：`at` 是画布坐标（工具条拖放时给「落点」，就是 CAD 的放法）；
+ * 不传则按第一个空位放（图标点一下加的默认行为）。
+ */
+function addSymbol(symbol: ScadaSymbolDefinition, at?: { x: number; y: number }): void {
   const grid = document.value.canvas.grid || 10
-  const spot = findFreeSpot(symbol.defaultWidth, symbol.defaultHeight, grid)
+  const spot = at
+    ? {
+        // 落点对准图元中心，和 CAD / Photoshop 里「拖到哪儿就落在哪儿」的手感一致。
+        x: Math.max(0, Math.round((at.x - symbol.defaultWidth / 2) / grid) * grid),
+        y: Math.max(0, Math.round((at.y - symbol.defaultHeight / 2) / grid) * grid),
+      }
+    : findFreeSpot(symbol.defaultWidth, symbol.defaultHeight, grid)
   const widget: ScadaWidget = {
     id: nextWidgetId(),
     symbolKey: symbol.key,
@@ -499,7 +518,21 @@ function onDrop(event: DragEvent): void {
   const symbol = symbolMap.value[key]
   if (!symbol) return
   event.preventDefault()
-  addSymbol(symbol)
+  addSymbol(symbol, dropPoint(event))
+}
+
+/**
+ * 拖放落点 → 画布坐标。
+ *
+ * 画布坐标是文档坐标，视口里的位置要除以缩放；取不到 svg（还没渲染）时返回 undefined，
+ * 交给 `addSymbol` 退回「第一个空位」。
+ */
+function dropPoint(event: DragEvent): { x: number; y: number } | undefined {
+  const svg = canvasHost.value?.querySelector('svg')
+  if (!svg) return undefined
+  const box = svg.getBoundingClientRect()
+  const scale = zoom.value || 1
+  return { x: (event.clientX - box.left) / scale, y: (event.clientY - box.top) / scale }
 }
 
 function deleteSelected(): void {
@@ -622,110 +655,124 @@ function exportSvg(): void {
     <!-- 唯一一条工具条：返回态在页签里，这里只留「文件 + 编辑 + 视图 + 右栏」。
          没有页头、没有面包屑、没有大标题行——和 CAD 一样，每一像素都还给画布。 -->
     <div class="scada-bar">
-      <div class="scada-bar__group">
-        <el-tooltip content="资源抽屉：画面与图元库" placement="bottom" :show-after="400">
-          <el-button
-            size="small"
-            :type="railOpen ? 'primary' : 'default'"
-            :plain="railOpen"
-            :icon="Operation"
-            @click="railOpen = !railOpen"
-          >
-            资源
-          </el-button>
-        </el-tooltip>
-        <el-dropdown trigger="click" @command="(command: string) => command === 'new' ? createScreen() : renameScreen()">
-          <button class="scada-title" type="button" :title="`${currentScreen?.name ?? '未选择画面'} · 点击管理画面`">
-            <strong>{{ currentScreen?.name ?? '未选择画面' }}</strong>
-            <em :class="{ 'is-dirty': dirty }">{{ dirty ? '未保存' : `v${currentScreen?.documentVersion ?? 0}` }}</em>
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="new" :icon="DocumentAdd">新建画面</el-dropdown-item>
-              <el-dropdown-item command="rename" :disabled="!currentScreen">重命名</el-dropdown-item>
-              <el-dropdown-item v-if="currentScreen" divided :icon="Delete" @click="deleteScreen">删除画面</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
+      <!-- 内容套一层 row：工具条自己当容器查询的宿主（`container-type` 在外面那层），
+           极端窄的时候让 row 横向滚动，而不是把右侧的「保存」直接裁掉。 -->
+      <div class="scada-bar__row">
+        <div class="scada-bar__group">
+          <el-tooltip content="资源抽屉：画面与图元库" placement="bottom" :show-after="400">
+            <el-button
+              size="small"
+              :type="railOpen ? 'primary' : 'default'"
+              :plain="railOpen"
+              :icon="Operation"
+              @click="railOpen = !railOpen"
+            >
+              资源
+            </el-button>
+          </el-tooltip>
+          <el-dropdown trigger="click" @command="(command: string) => command === 'new' ? createScreen() : renameScreen()">
+            <button class="scada-title" type="button" :title="`${currentScreen?.name ?? '未选择画面'} · 点击管理画面`">
+              <strong>{{ currentScreen?.name ?? '未选择画面' }}</strong>
+              <em :class="{ 'is-dirty': dirty }">{{ dirty ? '未保存' : `v${currentScreen?.documentVersion ?? 0}` }}</em>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="new" :icon="DocumentAdd">新建画面</el-dropdown-item>
+                <el-dropdown-item command="rename" :disabled="!currentScreen">重命名</el-dropdown-item>
+                <el-dropdown-item v-if="currentScreen" divided :icon="Delete" @click="deleteScreen">删除画面</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
 
-      <span class="scada-divider" />
+        <span class="scada-divider" />
 
-      <!-- 开关用图标按钮而不是带字的复选框：一条工具条只许一行，字是第一个让位的东西。 -->
-      <div class="scada-bar__group">
-        <el-tooltip :content="`栅格吸附：${snapEnabled ? '开' : '关'}`" placement="bottom">
-          <el-button size="small" :type="snapEnabled ? 'primary' : 'default'" :plain="snapEnabled" @click="snapEnabled = !snapEnabled">
-            吸附
-          </el-button>
+        <!-- 基础图形：CAD / Photoshop 那种「一排很小的图形图标」。
+             图标来自图元定义本身，点一下放到空位、拖到画布上放到指定位置。 -->
+        <el-tooltip content="基础图形：点一下加到画布，或拖到指定位置" placement="bottom" :show-after="400">
+          <span class="scada-bar__hint">图形</span>
         </el-tooltip>
-        <el-tooltip :content="`对齐参考线：${guideEnabled ? '开' : '关'}`" placement="bottom">
-          <el-button size="small" :type="guideEnabled ? 'primary' : 'default'" :plain="guideEnabled" @click="guideEnabled = !guideEnabled">
-            参考线
-          </el-button>
-        </el-tooltip>
-        <span class="scada-stat muted">
-          {{ document.widgets.length }} 图元 · {{ boundSlotCount }} 绑定 · {{ resolvedTagCount }} 变量
-        </span>
-      </div>
+        <ScadaShapeStrip :symbols="basicSymbols" :disabled="loading" @add="addSymbol" />
 
-      <span class="scada-spacer" />
+        <span class="scada-divider" />
 
-      <div class="scada-bar__group">
-        <el-tooltip content="下移一层" placement="bottom">
-          <el-button size="small" :icon="Bottom" :disabled="selectedIds.length !== 1" @click="changeZIndex(-1)" />
-        </el-tooltip>
-        <el-tooltip content="上移一层" placement="bottom">
-          <el-button size="small" :icon="Top" :disabled="selectedIds.length !== 1" @click="changeZIndex(1)" />
-        </el-tooltip>
-        <el-tooltip content="旋转 90°" placement="bottom">
-          <el-button size="small" :icon="RefreshRight" :disabled="!selectedIds.length" @click="rotateSelected" />
-        </el-tooltip>
-        <el-tooltip content="删除选中" placement="bottom">
-          <el-button size="small" :icon="Delete" :disabled="!selectedIds.length" @click="deleteSelected" />
-        </el-tooltip>
-      </div>
+        <!-- 开关用图标按钮而不是带字的复选框：一条工具条只许一行，字是第一个让位的东西。 -->
+        <div class="scada-bar__group">
+          <el-tooltip :content="`栅格吸附：${snapEnabled ? '开' : '关'}`" placement="bottom">
+            <el-button size="small" :type="snapEnabled ? 'primary' : 'default'" :plain="snapEnabled" @click="snapEnabled = !snapEnabled">
+              吸附
+            </el-button>
+          </el-tooltip>
+          <el-tooltip :content="`对齐参考线：${guideEnabled ? '开' : '关'}`" placement="bottom">
+            <el-button size="small" :type="guideEnabled ? 'primary' : 'default'" :plain="guideEnabled" @click="guideEnabled = !guideEnabled">
+              参考线
+            </el-button>
+          </el-tooltip>
+          <span class="scada-stat muted">
+            {{ document.widgets.length }} 图元 · {{ boundSlotCount }} 绑定 · {{ resolvedTagCount }} 变量
+          </span>
+        </div>
 
-      <div class="scada-bar__group scada-zoom">
-        <el-tooltip content="缩小" placement="bottom">
-          <el-button size="small" text @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 100) / 100)">−</el-button>
-        </el-tooltip>
-        <el-slider v-model="zoom" :min="0.1" :max="2" :step="0.05" size="small" :show-tooltip="false" class="scada-zoom__slider" />
-        <el-tooltip content="放大" placement="bottom">
-          <el-button size="small" text @click="zoom = Math.min(2, Math.round((zoom + 0.1) * 100) / 100)">＋</el-button>
-        </el-tooltip>
-        <span class="scada-stat muted scada-zoom__value">{{ Math.round(zoom * 100) }}%</span>
-        <el-tooltip content="适应画面（宽高同时利用）" placement="bottom">
-          <el-button size="small" :icon="Sort" @click="fitToView">适应</el-button>
-        </el-tooltip>
-      </div>
+        <span class="scada-spacer" />
 
-      <span class="scada-divider" />
+        <div class="scada-bar__group">
+          <el-tooltip content="下移一层" placement="bottom">
+            <el-button size="small" :icon="Bottom" :disabled="selectedIds.length !== 1" @click="changeZIndex(-1)" />
+          </el-tooltip>
+          <el-tooltip content="上移一层" placement="bottom">
+            <el-button size="small" :icon="Top" :disabled="selectedIds.length !== 1" @click="changeZIndex(1)" />
+          </el-tooltip>
+          <el-tooltip content="旋转 90°" placement="bottom">
+            <el-button size="small" :icon="RefreshRight" :disabled="!selectedIds.length" @click="rotateSelected" />
+          </el-tooltip>
+          <el-tooltip content="删除选中" placement="bottom">
+            <el-button size="small" :icon="Delete" :disabled="!selectedIds.length" @click="deleteSelected" />
+          </el-tooltip>
+        </div>
 
-      <div class="scada-bar__group">
-        <el-tooltip content="属性面板（右栏）" placement="bottom">
-          <el-button
-            size="small"
-            :type="inspectorOpen && panelTab === 'inspector' ? 'primary' : 'default'"
-            :plain="inspectorOpen && panelTab === 'inspector'"
-            @click="openInspector"
-          >
-            属性
-          </el-button>
-        </el-tooltip>
-        <!-- AI 不在这里放第二个入口：全站唯一的 AI 入口在顶栏（页面助手旁边），
-             工具条只留「属性」，否则同一个动作会有两条路径。 -->
-      </div>
+        <div class="scada-bar__group scada-zoom">
+          <el-tooltip content="缩小" placement="bottom">
+            <el-button size="small" text @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 100) / 100)">−</el-button>
+          </el-tooltip>
+          <el-slider v-model="zoom" :min="0.1" :max="2" :step="0.05" size="small" :show-tooltip="false" class="scada-zoom__slider" />
+          <el-tooltip content="放大" placement="bottom">
+            <el-button size="small" text @click="zoom = Math.min(2, Math.round((zoom + 0.1) * 100) / 100)">＋</el-button>
+          </el-tooltip>
+          <span class="scada-stat muted scada-zoom__value">{{ Math.round(zoom * 100) }}%</span>
+          <!-- 适应画面：改成纯图标按钮，给基础图形那一排让出宽度（文字在工具条上最先让位）。 -->
+          <el-tooltip content="适应画面（宽高同时利用）" placement="bottom">
+            <el-button size="small" :icon="Sort" @click="fitToView" />
+          </el-tooltip>
+        </div>
 
-      <span class="scada-divider" />
+        <span class="scada-divider" />
 
-      <div class="scada-bar__group">
-        <el-tooltip content="重新拉取画面、图元库与变量" placement="bottom">
-          <el-button size="small" :icon="Refresh" @click="refreshAll" />
-        </el-tooltip>
-        <el-tooltip content="导出当前画布为 SVG" placement="bottom">
-          <el-button size="small" :icon="Download" @click="exportSvg" />
-        </el-tooltip>
-        <el-button size="small" type="primary" :loading="saving" :disabled="!currentScreen" @click="saveScreen">保存</el-button>
+        <div class="scada-bar__group">
+          <el-tooltip content="属性面板（右栏）" placement="bottom">
+            <el-button
+              size="small"
+              :type="inspectorOpen && panelTab === 'inspector' ? 'primary' : 'default'"
+              :plain="inspectorOpen && panelTab === 'inspector'"
+              @click="openInspector"
+            >
+              属性
+            </el-button>
+          </el-tooltip>
+          <!-- AI 不在这里放第二个入口：全站唯一的 AI 入口在顶栏（页面助手旁边），
+               工具条只留「属性」，否则同一个动作会有两条路径。 -->
+        </div>
+
+        <span class="scada-divider" />
+
+        <div class="scada-bar__group">
+          <el-tooltip content="重新拉取画面、图元库与变量" placement="bottom">
+            <el-button size="small" :icon="Refresh" @click="refreshAll" />
+          </el-tooltip>
+          <el-tooltip content="导出当前画布为 SVG" placement="bottom">
+            <el-button size="small" :icon="Download" @click="exportSvg" />
+          </el-tooltip>
+          <el-button size="small" type="primary" :loading="saving" :disabled="!currentScreen" @click="saveScreen">保存</el-button>
+        </div>
       </div>
     </div>
 
@@ -846,12 +893,22 @@ function exportSvg(): void {
 /* 一列到底：工具条定高，舞台吃满剩余，滚动只发生在画布内部。 */
 .scada-page { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1 1 auto; height: 100%; background: var(--app-bg); }
 .scada-bar {
-  display: flex; align-items: center; gap: 6px; flex: none;
-  /* 严格一行：CAD 里工具条换行等于凭空吃掉一条画布高度。放不下就先让统计文字消失。 */
-  flex-wrap: nowrap; overflow: hidden;
+  display: flex; align-items: center; flex: none;
+  /* 严格一行：CAD 里工具条换行等于凭空吃掉一条画布高度。放不下就按下面 @container 的次序收控件。 */
+  overflow: hidden;
+  /* 工具条是自己的容器：收控件的判据是「工具条有多宽」，不是「窗口有多宽」。 */
+  container-type: inline-size;
   height: 40px; padding: 0 10px;
   background: var(--surface); border-bottom: 1px solid var(--line);
 }
+/* 内容层：一条不换行的行。收到极限还放不下时横向滚动——
+   宁可多一个滚动条，也不能让「保存」这种按钮在窄屏上变成点不到的死区。 */
+.scada-bar__row {
+  display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0;
+  flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
+}
+.scada-bar__row::-webkit-scrollbar { height: 0; }
 .scada-bar__group { display: flex; align-items: center; gap: 6px; flex: none; }
 .scada-bar__group .el-button + .el-button { margin-left: 0; }
 .scada-bar__group .el-button { padding-left: 8px; padding-right: 8px; }
@@ -859,7 +916,7 @@ function exportSvg(): void {
 .scada-divider { width: 1px; height: 18px; background: var(--line); flex: none; }
 .scada-stat { font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .scada-title {
-  display: inline-flex; align-items: center; gap: 6px; max-width: 220px; min-width: 0;
+  display: inline-flex; align-items: center; gap: 6px; max-width: 180px; min-width: 0;
   padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--surface); color: var(--app-text); cursor: pointer;
 }
@@ -868,7 +925,9 @@ function exportSvg(): void {
 .scada-title em { font-style: normal; font-size: 11px; color: var(--muted); flex: none; }
 .scada-title em.is-dirty { color: #f59e0b; }
 .scada-zoom { flex: none; }
-.scada-zoom__slider { width: 84px; }
+.scada-zoom__slider { width: 64px; }
+/* 「图形」两个字只是给那排图标一个标签，做到最小。 */
+.scada-bar__hint { font-size: 11px; color: var(--muted); white-space: nowrap; flex: none; }
 .scada-zoom__value { min-width: 34px; text-align: right; }
 .scada-alert { margin: 8px 12px 0; }
 
@@ -907,6 +966,15 @@ function exportSvg(): void {
 /* 右栏页签（属性 / AI 助手）由外壳面板承载，这里只让页签头贴住滚动区。 */
 .scada-panel-tabs { padding: 0 12px 12px; }
 .scada-panel-tabs :deep(.el-tabs__header) { margin-bottom: 10px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
-/* 窄屏：统计文字先让位给缩放与操作按钮。 */
-@media (max-width: 1400px) { .scada-stat { display: none; } }
+/* 工具条变窄时按「谁最没用谁先让位」逐级收，收的顺序只由本条决定：
+   统计文字 → 「图形」标签 → 缩放百分比 → 缩放滑杆。
+   那排图形图标与「属性/保存」这类主操作永远留着，它不是装饰。
+
+   用容器查询而不是 `@media (max-width: …)`：工具条的实际宽度取决于窗口 + 侧栏是否收起
+   （侧栏一收就多出 200+px），拿视口宽度当判据会在「窄窗口 + 侧栏收起」时白扔控件、
+   在「宽窗口 + 侧栏展开 + 右栏拖宽」时溢出。容器查询直接盯工具条自己的宽度，与谁占地方无关。 */
+@container (max-width: 1160px) { .scada-stat { display: none; } }
+@container (max-width: 1040px) { .scada-bar__hint { display: none; } }
+@container (max-width: 1000px) { .scada-zoom__value { display: none; } }
+@container (max-width: 900px) { .scada-zoom__slider { display: none; } }
 </style>
