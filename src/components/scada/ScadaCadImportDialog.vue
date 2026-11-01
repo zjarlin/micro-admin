@@ -1,5 +1,5 @@
-<!-- CAD 图纸导入：丢一个 DXF 进来，本地解析成绘图指令集，再决定要不要让 AI 补语义。
-     DWG 只在选择文件时就按魔数拦下并给「另存为 DXF」的提示（服务端同样按字节兜底）。
+<!-- CAD 图纸导入：丢一个 DXF / DWG 进来，服务端解析成绘图指令集，再决定要不要让 AI 补语义。
+     DWG 的原始字节由服务端交给 libredwg 的 WASM；二进制 DXF 在选择文件时就按魔数拦下。
      三段都在服务端完成（解析 / 应用 / 语义补全），前端只做拖放、选项与预览，
      所以「导入的几何」和「AI 画的几何」走同一个执行器，不会出现两套坐标系。 -->
 <script setup lang="ts">
@@ -106,17 +106,14 @@ async function loadFile(file: File): Promise<void> {
   const bytes = new Uint8Array(buffer)
   // 按**字节**判格式，不看扩展名：`.dwg` 改名成 `.dxf`、浏览器给的 MIME 不准都很常见，
   // 扩展名对不上时若不拦，等传完 5MB 才在服务端报错。
+  // DWG 现在**可以**直接导入（服务端走 libredwg 的 WASM），只有二进制 DXF 还要求转存。
   const format = detectCadFormat(bytes)
-  if (format === 'dwg') {
-    error.value = `这是 DWG 二进制图纸（${file.name}）：请在 CAD 里「另存为 DXF（R2000 及以上）」再导入`
-    return
-  }
   if (format === 'binary-dxf') {
     error.value = '这是二进制 DXF：请在 CAD 里另存为 ASCII DXF 再导入'
     return
   }
   if (!/\.(dxf|dwg)$/i.test(file.name)) {
-    error.value = `不支持的文件类型：${file.name}。请选择 .dxf 文件`
+    error.value = `不支持的文件类型：${file.name}。请选择 .dxf 或 .dwg 文件`
     return
   }
   let binary = ''
@@ -251,9 +248,9 @@ async function applyWithAi(): Promise<void> {
       >
         <el-icon :size="26"><UploadFilled /></el-icon>
         <div class="cad-drop__text">
-          <strong>{{ fileName || '把 .dxf 图纸拖到这里，或点击选择文件' }}</strong>
+          <strong>{{ fileName || '把 .dxf / .dwg 图纸拖到这里，或点击选择文件' }}</strong>
           <span v-if="fileName">{{ formatBytes(fileBytes) }} · 已在服务端解析，本地不花 token</span>
-          <span v-else>支持 ASCII DXF（R2000+）；DWG 请先在 CAD 里另存为 DXF</span>
+          <span v-else>支持 DWG（R13~2018）与 ASCII DXF；二进制 DXF 请转存</span>
         </div>
         <label class="cad-drop__pick">
           <input type="file" accept=".dxf,.dwg" @change="onPick" />

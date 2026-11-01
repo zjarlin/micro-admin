@@ -13,14 +13,18 @@
 //    带弧的多段线判成闭合；这里逐位判断。
 // 2. **LWPOLYLINE 的 bulge 跟随在顶点之后**（组码 42），漏读就把圆角管道画成直角。
 import type { CadDrawing, CadEntity, CadLayer, CadPoint, CadUnit } from './types.ts'
-
-/** 展开块引用时的保护：深度与总次数，防止病态图纸把进程拖死。 */
-const MAX_BLOCK_DEPTH = 8
-const MAX_INSERT_EXPANSIONS = 5000
-/** 圆弧折线的每圈分段数：每 30 度一段，够画出弯头又不会把实体数翻几十倍。 */
-const ARC_SEGMENTS = 12
-/** 折线中一段 bulge 弧的最大分段。 */
-const BULGE_SEGMENTS = 6
+import {
+  arcPoints,
+  applyTransform,
+  expandPolyline,
+  ellipsePoints,
+  extentsOf,
+  IDENTITY,
+  MAX_BLOCK_DEPTH,
+  MAX_INSERT_EXPANSIONS,
+  plainCadText,
+  type Transform,
+} from './geometry.ts'
 
 interface Pair {
   code: number
@@ -89,19 +93,6 @@ function firstText(pairs: Pair[], record: { start: number; end: number }, code: 
   return fallback
 }
 
-/**
- * MTEXT 的 `\P` 是换行、`{\...}` 是样式包裹；组态画布只画单行文本，
- * 因此换行转空格、样式码直接去掉。
- */
-function plainMText(raw: string): string {
-  return raw
-    .replace(/\\P/g, ' ')
-    .replace(/\\[A-Za-z][^;\\]*;/g, '')
-    .replace(/[{}]/g, '')
-    .replace(/\\\\/g, '\\')
-    .trim()
-}
-
 /** 解析 `$INSUNITS` 与版本，用于「单位提示」，不参与几何。 */
 function readHeader(pairs: Pair[]): { version: string; units: CadUnit } {
   let version = ''
@@ -168,75 +159,7 @@ function readBlocks(pairs: Pair[]): Map<string, BlockDef> {
   return blocks
 }
 
-interface Transform {
-  dx: number
-  dy: number
-  scaleX: number
-  scaleY: number
-  /** 旋转角（度）。 */
-  rotation: number
-}
-
-const IDENTITY: Transform = { dx: 0, dy: 0, scaleX: 1, scaleY: 1, rotation: 0 }
-
-function rotatePoint(point: CadPoint, degrees: number): CadPoint {
-  if (!degrees) return point
-  const rad = (degrees * Math.PI) / 180
-  const cos = Math.cos(rad)
-  const sin = Math.sin(rad)
-  return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos }
-}
-
-function applyTransform(point: CadPoint, transform: Transform): CadPoint {
-  const scaled = { x: point.x * transform.scaleX, y: point.y * transform.scaleY }
-  const rotated = rotatePoint(scaled, transform.rotation)
-  return { x: rotated.x + transform.dx, y: rotated.y + transform.dy }
-}
-
 // ---------------- 实体读取 ----------------
-
-/**
- * 折线顶点 + bulge：bulge 是「该段圆弧的凸度」，`tan(圆心角/4)`；
- * 正负决定弧朝哪一侧。按段折线化，才能把圆角管道/圆头画成弧。
- */
-function bulgePoints(from: CadPoint, to: CadPoint, bulge: number): CadPoint[] {
-  if (!Number.isFinite(bulge) || Math.abs(bulge) < 1e-6) return []
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const chord = Math.hypot(dx, dy)
-  if (chord < 1e-9) return []
-  const theta = 4 * Math.atan(bulge)
-  const radius = Math.abs(chord / (2 * Math.sin(theta / 2)))
-  // 圆心在中点沿法线偏移：偏移量 = radius * cos(theta/2)，方向由 bulge 符号决定。
-  const offset = radius * Math.cos(theta / 2) * Math.sign(bulge)
-  const mx = (from.x + to.x) / 2
-  const my = (from.y + to.y) / 2
-  const nx = -dy / chord
-  const ny = dx / chord
-  const cx = mx + nx * offset
-  const cy = my + ny * offset
-  const startAngle = Math.atan2(from.y - cy, from.x - cx)
-  const points: CadPoint[] = []
-  const steps = Math.max(3, Math.min(BULGE_SEGMENTS, Math.ceil(Math.abs(theta) / (Math.PI / 8)) * 2))
-  for (let step = 1; step < steps; step += 1) {
-    const angle = startAngle + (theta * step) / steps
-    points.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) })
-  }
-  return points
-}
-
-/** 圆弧折线化：`start`/`end` 是 DXF 的角度（度，逆时针）。 */
-function arcPoints(center: CadPoint, radius: number, start: number, end: number, segments = ARC_SEGMENTS): CadPoint[] {
-  let sweep = end - start
-  if (sweep <= 0) sweep += 360
-  const steps = Math.max(4, Math.ceil((Math.abs(sweep) / 360) * segments))
-  const points: CadPoint[] = []
-  for (let step = 0; step <= steps; step += 1) {
-    const angle = ((start + (sweep * step) / steps) * Math.PI) / 180
-    points.push({ x: center.x + radius * Math.cos(angle), y: center.y + radius * Math.sin(angle) })
-  }
-  return points
-}
 
 interface EmitContext {
   pairs: Pair[]
@@ -258,66 +181,61 @@ function emit(ctx: EmitContext, record: { type: string; start: number; end: numb
       return
     }
     case 'LWPOLYLINE': {
-      // 70 是位标记：1 = 闭合。顶点是成对出现的 10/20，42 跟随在对应顶点之后。
+      // 70 是位标记：1 = 闭合。顶点是成对出现的 10/20，42 是该顶点**出发段**的凸度。
       const flags = firstNum(pairs, record, 70, 0)
       const closed = (flags & 1) === 1
-      const points: CadPoint[] = []
-      let pending: CadPoint | null = null
-      let bulge = 0
+      const vertices: Array<{ point: CadPoint; bulge: number }> = []
+      let pending: { point: CadPoint; bulge: number } | null = null
       for (let index = record.start; index < record.end; index += 1) {
         const pair = pairs[index] as Pair
         if (pair.code === 10) {
-          if (pending) points.push(pending)
-          pending = { x: num(pairs, index), y: 0 }
-          bulge = 0
+          if (pending) vertices.push(pending)
+          pending = { point: { x: num(pairs, index), y: 0 }, bulge: 0 }
           continue
         }
         if (pair.code === 20 && pending) {
-          pending.y = num(pairs, index)
+          pending.point.y = num(pairs, index)
           continue
         }
         if (pair.code === 42 && pending) {
-          // 顶点后面紧跟的 bulge 属于「从这个顶点出发的那一段」。
-          bulge = num(pairs, index)
-          if (bulge && points.length > 0) {
-            const previous = points[points.length - 1] as CadPoint
-            for (const point of bulgePoints(previous, pending, bulge)) points.push(point)
-          }
-          bulge = 0
+          pending.bulge = num(pairs, index)
         }
       }
-      if (pending) points.push(pending)
-      const transformed = points.map((point) => applyTransform(point, transform))
+      if (pending) vertices.push(pending)
+      const transformed = expandPolyline(vertices).map((point) => applyTransform(point, transform))
       if (transformed.length >= 2) ctx.entities.push({ kind: 'polyline', layer, closed, points: transformed })
       return
     }
     case 'POLYLINE': {
-      // 老式 POLYLINE：顶点是随后的 VERTEX 记录，闭合标记在 POLYLINE 的 70 上。
+      // 老式 POLYLINE：顶点是随后的 VERTEX 记录，闭合标记在 POLYLINE 的 70 上，
+      // 每段凸度在 VERTEX 自己的 42 上（同样属于「从该顶点出发」的那一段）。
       const flags = firstNum(pairs, record, 70, 0)
       const closed = (flags & 1) === 1
-      const points: CadPoint[] = []
+      const vertices: Array<{ point: CadPoint; bulge: number }> = []
       let cursor = record.end
       while (cursor < pairs.length) {
         const pair = pairs[cursor] as Pair
-        if (pair.code === 0) {
-          const type = pair.value.trim().toUpperCase()
-          if (type !== 'VERTEX') break
-          let x = 0
-          let y = 0
-          for (let index = cursor; index < pairs.length; index += 1) {
-            const item = pairs[index] as Pair
-            if (index > cursor && item.code === 0) break
-            if (item.code === 10) x = num(pairs, index)
-            if (item.code === 20) y = num(pairs, index)
-          }
-          points.push(applyTransform({ x, y }, transform))
-          // 跳过这条 VERTEX 记录
+        if (pair.code !== 0) {
           cursor += 1
-          while (cursor < pairs.length && (pairs[cursor] as Pair).code !== 0) cursor += 1
           continue
         }
+        if (pair.value.trim().toUpperCase() !== 'VERTEX') break
+        let x = 0
+        let y = 0
+        let bulge = 0
+        for (let index = cursor; index < pairs.length; index += 1) {
+          const item = pairs[index] as Pair
+          if (index > cursor && item.code === 0) break
+          if (item.code === 10) x = num(pairs, index)
+          if (item.code === 20) y = num(pairs, index)
+          if (item.code === 42) bulge = num(pairs, index)
+        }
+        vertices.push({ point: { x, y }, bulge })
+        // 跳过这条 VERTEX 记录
         cursor += 1
+        while (cursor < pairs.length && (pairs[cursor] as Pair).code !== 0) cursor += 1
       }
+      const points = expandPolyline(vertices).map((point) => applyTransform(point, transform))
       if (points.length >= 2) ctx.entities.push({ kind: 'polyline', layer, closed, points })
       return
     }
@@ -341,34 +259,23 @@ function emit(ctx: EmitContext, record: { type: string; start: number; end: numb
       const center = applyTransform({ x: firstNum(pairs, record, 10), y: firstNum(pairs, record, 20) }, transform)
       const major = { x: firstNum(pairs, record, 11), y: firstNum(pairs, record, 21) }
       const ratio = firstNum(pairs, record, 40, 1)
-      const start = firstNum(pairs, record, 41, 0) * 180 / Math.PI
-      const end = firstNum(pairs, record, 42, 6.2831853) * 180 / Math.PI
-      const steps = 48
-      const sweep = end - start
-      const points: CadPoint[] = []
-      const minor = { x: -major.y * ratio, y: major.x * ratio }
-      for (let step = 0; step <= steps; step += 1) {
-        const angle = start + (sweep * step) / steps
-        const rad = (angle * Math.PI) / 180
-        const point = {
-          x: center.x + major.x * Math.cos(rad) + minor.x * Math.sin(rad),
-          y: center.y + major.y * Math.cos(rad) + minor.y * Math.sin(rad),
-        }
-        points.push(applyTransform(point, { ...transform, dx: 0, dy: 0 }))
-      }
-      const full = Math.abs(sweep) >= 359.9
+      // 组码 41/42 是**参数角（弧度）**，不是度：DXF 里椭圆和圆弧的单位不一样。
+      const start = firstNum(pairs, record, 41, 0)
+      const end = firstNum(pairs, record, 42, Math.PI * 2)
+      const full = Math.abs(end - start) >= Math.PI * 2 - 1e-6
       if (full) {
-        const radius = Math.hypot(major.x, major.y)
-        ctx.entities.push({ kind: 'circle', layer, center, radius })
-      } else {
-        ctx.entities.push({ kind: 'polyline', layer, closed: false, points })
+        ctx.entities.push({ kind: 'circle', layer, center, radius: Math.hypot(major.x, major.y) })
+        return
       }
+      const points = ellipsePoints(center, major, ratio, start, end)
+        .map((point) => applyTransform(point, { ...transform, dx: 0, dy: 0 }))
+      ctx.entities.push({ kind: 'polyline', layer, closed: false, points })
       return
     }
     case 'TEXT':
     case 'MTEXT': {
       const raw = record.type === 'TEXT' ? firstText(pairs, record, 1, '') : firstText(pairs, record, 1, '')
-      const text = record.type === 'MTEXT' ? plainMText(raw) : raw.trim()
+      const text = record.type === 'MTEXT' ? plainCadText(raw) : raw.trim()
       if (!text) return
       const at = applyTransform({ x: firstNum(pairs, record, 10), y: firstNum(pairs, record, 20) }, transform)
       const height = (firstNum(pairs, record, 40, 2.5) || 2.5) * Math.abs(transform.scaleY || 1)
@@ -415,49 +322,6 @@ function emit(ctx: EmitContext, record: { type: string; start: number; end: numb
       ctx.skipped.set(type, (ctx.skipped.get(type) ?? 0) + 1)
     }
   }
-}
-
-/** 图纸包围盒：圆弧用采样点，圆用中心 ± 半径，文字按高度估。 */
-function extentsOf(entities: CadEntity[]): { min: CadPoint; max: CadPoint } | null {
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-  const grow = (x: number, y: number): void => {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return
-    minX = Math.min(minX, x)
-    minY = Math.min(minY, y)
-    maxX = Math.max(maxX, x)
-    maxY = Math.max(maxY, y)
-  }
-  for (const entity of entities) {
-    switch (entity.kind) {
-      case 'line':
-        grow(entity.a.x, entity.a.y)
-        grow(entity.b.x, entity.b.y)
-        break
-      case 'polyline':
-        for (const point of entity.points) grow(point.x, point.y)
-        break
-      case 'circle':
-        grow(entity.center.x - entity.radius, entity.center.y - entity.radius)
-        grow(entity.center.x + entity.radius, entity.center.y + entity.radius)
-        break
-      case 'ellipse':
-        grow(entity.center.x - Math.hypot(entity.major.x, entity.major.y), entity.center.y - Math.hypot(entity.major.x, entity.major.y))
-        grow(entity.center.x + Math.hypot(entity.major.x, entity.major.y), entity.center.y + Math.hypot(entity.major.x, entity.major.y))
-        break
-      case 'text':
-        grow(entity.at.x, entity.at.y)
-        grow(entity.at.x + entity.text.length * entity.height * 0.6, entity.at.y + entity.height)
-        break
-      case 'point':
-        grow(entity.at.x, entity.at.y)
-        break
-    }
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null
-  return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } }
 }
 
 /**

@@ -14,6 +14,8 @@ import type { CadDrawing, CadSymbolizeOptions, CadSymbolizeResult } from './type
 
 export { detectCadFormat, parseDxf } from './dxf.ts'
 export type { CadFileFormat } from './dxf.ts'
+export { dwgToDrawing } from './dwg.ts'
+export type { DwgDatabaseLike, DwgVersionLike } from './dwg.ts'
 export { symbolize } from './symbolize.ts'
 export { shapesToCommands, shapesDigest } from './commands.ts'
 export type { CadCommandOptions } from './commands.ts'
@@ -48,7 +50,16 @@ export interface CadImportResult {
  * 不做 I/O（读文件、解码编码由调用方负责），因此浏览器与 Node 都能直接用。
  */
 export function importCadFile(text: string, options: CadImportOptions = {}): CadImportResult {
-  const drawing = parseDxf(text)
+  return symbolizeDrawing(parseDxf(text), text.length, options)
+}
+
+/**
+ * 一次完整导入：**已解析好的图纸** → 指令 + 摘要。
+ *
+ * DXF 与 DWG 共用这一步：谁都不需要在下游再写一遍归类/缩放/指令生成，
+ * 「CAD 导入的画面」在两种格式下是同一套规则。
+ */
+export function symbolizeDrawing(drawing: CadDrawing, sourceBytes: number, options: CadImportOptions = {}): CadImportResult {
   const layers = options.layers && options.layers.length > 0
     ? options.layers
     // 不指定图层时只保留可见图层：CAD 里被关掉的图层（尺寸标注、图框）不该进画面。
@@ -63,7 +74,7 @@ export function importCadFile(text: string, options: CadImportOptions = {}): Cad
     digest,
     warnings: [...drawing.warnings, ...symbolized.warnings],
     bytes: {
-      source: text.length,
+      source: sourceBytes,
       commands: commands.length,
       digest: digest.length,
     },

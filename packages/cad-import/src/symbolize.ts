@@ -36,6 +36,78 @@ function boxOfPoints(points: CadPoint[]): Box {
   return { minX, minY, maxX, maxY }
 }
 
+/**
+ * 稳健取景：图纸里常有几个「离主体几百倍远」的实体（画错的辅助线、块缩放炸掉的标注、
+ * 从别的图复制进来的残留几何）。用全量包围盒取景会让主体缩成一个小点——实测一张
+ * 3000 单位的图被一个 1e6 外的块拖到缩放比 0.000，几何全部低于最小尺寸被丢弃。
+ *
+ * 判定**按实体**做分位，不是按顶点：一条 25 段的圆角管道会产生几百个点，
+ * 拿点做分位会把主体范围压到那条管道身上（第一版就是这么误剪了 138/141 个实体）。
+ * 剪枝也很保守：只有全量比主体大 5 倍以上才生效，且会把「离主体 2 倍以内」的实体全捞回来，
+ * 正常图纸走全量包围盒，行为与没有这层保护时完全一致。
+ */
+const OUTLIER_RATIO = 5
+/** 主体范围向外扩张的倍数：够把紧挨着的真实图元捞回来，又不至于把散点重新放大。 */
+const OUTLIER_MARGIN = 2
+
+function percentileBox(boxes: Box[], low: number, high: number): Box {
+  const pickMinX = boxes.map((box) => box.minX).sort((left, right) => left - right)
+  const pickMaxX = boxes.map((box) => box.maxX).sort((left, right) => left - right)
+  const pickMinY = boxes.map((box) => box.minY).sort((left, right) => left - right)
+  const pickMaxY = boxes.map((box) => box.maxY).sort((left, right) => left - right)
+  const at = (list: number[], ratio: number): number => {
+    if (list.length === 0) return 0
+    const index = Math.min(list.length - 1, Math.max(0, Math.round((list.length - 1) * ratio)))
+    return list[index] as number
+  }
+  return { minX: at(pickMinX, low), minY: at(pickMinY, low), maxX: at(pickMaxX, high), maxY: at(pickMaxY, high) }
+}
+
+function unionBox(boxes: Box[]): Box {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const box of boxes) {
+    minX = Math.min(minX, box.minX)
+    minY = Math.min(minY, box.minY)
+    maxX = Math.max(maxX, box.maxX)
+    maxY = Math.max(maxY, box.maxY)
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+function robustBounds(boxes: Box[], warnings: string[]): { box: Box; clipped: boolean } {
+  if (boxes.length === 0) return { box: boxOfPoints([]), clipped: false }
+  const full = unionBox(boxes)
+  const core = percentileBox(boxes, 0.1, 0.9)
+  const coreWidth = Math.max(width(core), 1)
+  const coreHeight = Math.max(height(core), 1)
+  const ratio = Math.max(width(full) / coreWidth, height(full) / coreHeight)
+  if (!Number.isFinite(ratio) || ratio < OUTLIER_RATIO) return { box: full, clipped: false }
+  // 把紧挨主体（2 倍以内）的实体捞回来：放宽后的框仍远小于全量，但不会误剪贴边图元。
+  const slack: Box = {
+    minX: core.minX - coreWidth * OUTLIER_MARGIN,
+    minY: core.minY - coreHeight * OUTLIER_MARGIN,
+    maxX: core.maxX + coreWidth * OUTLIER_MARGIN,
+    maxY: core.maxY + coreHeight * OUTLIER_MARGIN,
+  }
+  const kept = boxes.filter((box) => !escapes(box, slack))
+  const frame = unionBox(kept.length > 0 ? kept : [core])
+  warnings.push(`有少量实体离图纸主体超过 ${Math.round(ratio)} 倍远，已按主体范围取景（这些图元不会出现在画面里）`)
+  return { box: frame, clipped: true }
+}
+
+/**
+ * 实体是否**越出**取景框。
+ *
+ * 注意不能用「与框不相交」来判断：块缩放炸掉的那种巨型线条（样本里 1.4M × 1.4M）
+ * 会把整个主体包在里面，与框明明相交，却正是要被剪掉的那个。判据必须是「伸出去多远」。
+ */
+function escapes(box: Box, frame: Box): boolean {
+  return box.minX < frame.minX || box.maxX > frame.maxX || box.minY < frame.minY || box.maxY > frame.maxY
+}
+
 function width(box: Box): number {
   return box.maxX - box.minX
 }
@@ -161,6 +233,35 @@ function textInside(box: Box, point: CadPoint): boolean {
   return point.x >= box.minX && point.x <= box.maxX && point.y >= box.minY && point.y <= box.maxY
 }
 
+/** 单个实体的包围盒（圆/椭圆用外接方框，文字按「字数 × 字高 × 0.6」估宽）。 */
+export function boxOfEntity(entity: CadEntity): Box {
+  switch (entity.kind) {
+    case 'line':
+      return boxOfPoints([entity.a, entity.b])
+    case 'polyline':
+      return boxOfPoints(entity.points)
+    case 'circle':
+      return boxOfPoints([
+        { x: entity.center.x - entity.radius, y: entity.center.y - entity.radius },
+        { x: entity.center.x + entity.radius, y: entity.center.y + entity.radius },
+      ])
+    case 'ellipse': {
+      const reach = Math.hypot(entity.major.x, entity.major.y)
+      return boxOfPoints([
+        { x: entity.center.x - reach, y: entity.center.y - reach },
+        { x: entity.center.x + reach, y: entity.center.y + reach },
+      ])
+    }
+    case 'text':
+      return boxOfPoints([entity.at, { x: entity.at.x + entity.text.length * entity.height * 0.6, y: entity.at.y - entity.height }])
+    case 'point':
+      return boxOfPoints([entity.at])
+    default:
+      // 新增实体类型时不要静默返回 undefined：给一个退化框，取景照常工作。
+      return boxOfPoints([])
+  }
+}
+
 /**
  * 主入口：实体 → 画布图元。
  *
@@ -177,33 +278,11 @@ export function symbolize(entities: CadEntity[], options: CadSymbolizeOptions = 
   const layerFilter = options.layers && options.layers.length > 0 ? new Set(options.layers) : null
   const usable = entities.filter((entity) => (layerFilter ? layerFilter.has(entity.layer) : true))
 
-  // 图纸包围盒（用可用实体重算，避免被隐藏图层的图元撑大）。
-  const allPoints: CadPoint[] = []
-  for (const entity of usable) {
-    switch (entity.kind) {
-      case 'line':
-        allPoints.push(entity.a, entity.b)
-        break
-      case 'polyline':
-        allPoints.push(...entity.points)
-        break
-      case 'circle':
-        allPoints.push({ x: entity.center.x - entity.radius, y: entity.center.y - entity.radius })
-        allPoints.push({ x: entity.center.x + entity.radius, y: entity.center.y + entity.radius })
-        break
-      case 'ellipse':
-        allPoints.push({ x: entity.center.x - Math.hypot(entity.major.x, entity.major.y), y: entity.center.y - Math.hypot(entity.major.x, entity.major.y) })
-        allPoints.push({ x: entity.center.x + Math.hypot(entity.major.x, entity.major.y), y: entity.center.y + Math.hypot(entity.major.x, entity.major.y) })
-        break
-      case 'text':
-        allPoints.push(entity.at, { x: entity.at.x + entity.text.length * entity.height * 0.6, y: entity.at.y - entity.height })
-        break
-      case 'point':
-        allPoints.push(entity.at)
-        break
-    }
-  }
-  if (allPoints.length === 0) {
+  // 每个实体自己的包围盒：取景与「是否在图内」都以实体为单位判断。
+  const entityBoxes = new Map<CadEntity, Box>()
+  for (const entity of usable) entityBoxes.set(entity, boxOfEntity(entity))
+
+  if (entityBoxes.size === 0) {
     return {
       shapes: [],
       canvas,
@@ -212,7 +291,8 @@ export function symbolize(entities: CadEntity[], options: CadSymbolizeOptions = 
       stats: { entities: 0, used: 0, dropped: 0, merged: 0, byKind: {} },
     }
   }
-  const bounds = boxOfPoints(allPoints)
+  const framed = robustBounds([...entityBoxes.values()], warnings)
+  const bounds = framed.box
   const drawingWidth = Math.max(width(bounds), 1)
   const drawingHeight = Math.max(height(bounds), 1)
   const inner = { width: Math.max(canvas.width - PADDING * 2, 1), height: Math.max(canvas.height - PADDING * 2, 1) }
@@ -260,7 +340,18 @@ export function symbolize(entities: CadEntity[], options: CadSymbolizeOptions = 
     byKind['line'] = (byKind['line'] ?? 0) + 1
   }
 
+  /** 取景框外的实体直接跳过：它们只会被 clamp 到画布边缘，变成一堆假图元。 */
+  let clipped = 0
+  const inFrame = (entity: CadEntity): boolean => {
+    if (!framed.clipped) return true
+    const box = entityBoxes.get(entity)
+    if (!box || !escapes(box, bounds)) return true
+    clipped += 1
+    return false
+  }
+
   for (const entity of usable) {
+    if (!inFrame(entity)) continue
     switch (entity.kind) {
       case 'line':
         pushSegment(entity.layer, entity.a, entity.b)
@@ -472,12 +563,14 @@ export function symbolize(entities: CadEntity[], options: CadSymbolizeOptions = 
     byKind.text = (byKind.text ?? 0) + 1
   }
 
+  if (clipped > 0) warnings.push(`${clipped} 个实体在取景范围外，已略过`)
+
   // 数量上限：按面积取大者（小标注线先丢），避免一张密集图纸把画布塞满。
-  let dropped = 0
+  let dropped = clipped
   if (shapes.length > maxShapes) {
     const sorted = [...shapes].sort((left, right) => right.rect.width * right.rect.height - left.rect.width * left.rect.height)
     const keep = new Set(sorted.slice(0, maxShapes).map((shape) => shape))
-    dropped = shapes.length - maxShapes
+    dropped += shapes.length - maxShapes
     warnings.push(`图元太多（${shapes.length} 个），按面积保留前 ${maxShapes} 个，其余 ${dropped} 个已省略`)
     shapes.length = 0
     for (const shape of sorted.slice(0, maxShapes)) if (keep.has(shape)) shapes.push(shape)

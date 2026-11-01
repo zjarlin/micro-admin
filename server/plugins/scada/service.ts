@@ -323,11 +323,12 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
         return { deleted: before - state.screens.length }
       }
 
-      // ---------------- CAD 图纸导入（DXF → 绘图指令集） ----------------
+      // ---------------- CAD 图纸导入（DXF/DWG → 绘图指令集） ----------------
 
       if (path === '/scada/cad/import' && method === 'POST') {
         // 不落库：前端先预览指令与体积对比，确认后再写画面。
-        return importCad(body)
+        // DWG 要走 libredwg 的 WASM（异步动态加载），DXF 也是同一个入口。
+        return await importCad(body)
       }
 
       if (path === '/scada/cad/apply' && method === 'POST') {

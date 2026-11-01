@@ -8,7 +8,8 @@
 // 因此这个接口**不落库**：前端先看到预览与体积对比，确认后才写画面。
 // 这样「一次导入」不会悄悄改掉用户的画面，也让 AI 补语义可以反复试。
 import { applyCommands, parseCommands, type DslDocument, type DslSymbol, type DslTag } from '@addzero/scada-dsl'
-import { detectCadFormat, importCadFile } from '../../../src/shared/scada/cad.ts'
+import { detectCadFormat, importCadFile, symbolizeDrawing } from '../../../src/shared/scada/cad.ts'
+import type { CadImportOptions } from '../../../src/shared/scada/cad.ts'
 import type { ScadaSymbolDefinition, ScadaTagOption } from '../../../src/shared/scada/types.ts'
 
 /** 图纸体积上限：DXF 是文本，5MB 已经是一张很密的图；再大就是误传了文件。 */
@@ -37,52 +38,62 @@ export interface CadImportPayload {
  * 返回体刻意带上 `bytes`（源文件 / 指令 / 摘要 三者字节数），
  * 界面直接用这组数字解释「为什么这套导入省 token」。
  */
-export function importCad(payload: CadImportPayload): Record<string, unknown> {
+export async function importCad(payload: CadImportPayload): Promise<Record<string, unknown>> {
   const raw = typeof payload.content === 'string' ? payload.content : ''
-  if (!raw.trim()) throw badRequest('缺少 content：请把 DXF 文本（或 base64）传进来')
+  if (!raw.trim()) throw badRequest('缺少 content：请把图纸内容（或 base64）传进来')
   const isBase64 = payload.base64 === true
 
-  let source: string
+  // 两种输入：文本 DXF（直接给 content）、或任意二进制（base64，服务端自己判格式）。
+  let bytes: Uint8Array | null = null
+  let source = ''
   if (isBase64) {
-    const bytes = Buffer.from(raw.replace(/^data:[^,]*,/, ''), 'base64')
+    bytes = Buffer.from(raw.replace(/^data:[^,]*,/, ''), 'base64')
     if (bytes.length > MAX_SOURCE_BYTES) throw badRequest(`图纸太大（${(bytes.length / 1048576).toFixed(1)}MB），上限 5MB`)
-    // 先按字节判格式再解码：DWG 是二进制，用 UTF-8/GBK 解一遍会把魔数之后的结构破坏掉，
-    // 于是报错会变成「没有 ENTITIES 段」这种误导信息，用户根本不知道是文件类型不对。
-    const format = detectCadFormat(bytes)
-    if (format === 'dwg') {
-      throw badRequest('这是 DWG 二进制图纸：请在 CAD 里「另存为 DXF（R2000 及以上）」再导入')
-    }
-    if (format === 'binary-dxf') throw badRequest('这是二进制 DXF：请另存为 ASCII DXF 再导入')
-    source = decodeBytes(bytes)
   } else {
     if (raw.length > MAX_SOURCE_BYTES) throw badRequest(`图纸太大（${(raw.length / 1048576).toFixed(1)}MB），上限 5MB`)
     // 纯文本按 UTF-8 直读；国内 CAD 导出的 GBK 图纸要按 base64 传，由服务端重解。
     source = raw
   }
 
+  // 先按**字节**判格式再解码：DWG 是二进制，用 UTF-8/GBK 解一遍会把结构破坏掉，
+  // 于是报错会变成「没有 ENTITIES 段」这种误导信息，用户根本不知道是文件类型不对。
+  const format = bytes ? detectCadFormat(bytes) : 'dxf'
+  if (format === 'binary-dxf') throw badRequest('这是二进制 DXF：请在 CAD 里另存为 ASCII DXF 再导入')
+  if (bytes && format === 'dxf') source = decodeBytes(bytes)
+
   const options = (typeof payload.options === 'object' && payload.options !== null ? payload.options : {}) as Record<string, unknown>
   const canvas = (typeof options.canvas === 'object' && options.canvas !== null ? options.canvas : null) as Record<string, unknown> | null
   const layers = Array.isArray(options.layers) ? options.layers.filter((item): item is string => typeof item === 'string') : undefined
 
+  const importOptions: CadImportOptions = {
+    ...(canvas
+      ? {
+          canvas: {
+            width: Math.min(Math.max(numberOr(canvas.width, 1920), 320), 7680),
+            height: Math.min(Math.max(numberOr(canvas.height, 1080), 240), 4320),
+          },
+        }
+      : {}),
+    ...(layers && layers.length > 0 ? { layers } : {}),
+    ...(Number.isFinite(Number(options.minSize)) ? { minSize: Math.min(Math.max(Number(options.minSize), 1), 64) } : {}),
+    ...(Number.isFinite(Number(options.maxShapes)) ? { maxShapes: Math.min(Math.max(Number(options.maxShapes), 8), 600) } : {}),
+    ...(Number.isFinite(Number(options.snapAngle)) ? { snapAngle: Math.min(Math.max(Number(options.snapAngle), 0), 45) } : {}),
+  }
+
   let result
   try {
-    result = importCadFile(source, {
-      ...(canvas
-        ? {
-            canvas: {
-              width: Math.min(Math.max(numberOr(canvas.width, 1920), 320), 7680),
-              height: Math.min(Math.max(numberOr(canvas.height, 1080), 240), 4320),
-            },
-          }
-        : {}),
-      ...(layers && layers.length > 0 ? { layers } : {}),
-      ...(Number.isFinite(Number(options.minSize)) ? { minSize: Math.min(Math.max(Number(options.minSize), 1), 64) } : {}),
-      ...(Number.isFinite(Number(options.maxShapes)) ? { maxShapes: Math.min(Math.max(Number(options.maxShapes), 8), 600) } : {}),
-      ...(Number.isFinite(Number(options.snapAngle)) ? { snapAngle: Math.min(Math.max(Number(options.snapAngle), 0), 45) } : {}),
-    })
+    if (bytes && format === 'dwg') {
+      // DWG 走 libredwg 的 WASM（可选依赖）：解析出来还是同一份 `CadDrawing`，
+      // 下面的归类/指令/摘要与 DXF 完全共用，不存在第二套几何语义。
+      const { parseDwg } = await import('../../../packages/cad-import/src/dwg-reader.ts')
+      const drawing = await parseDwg(bytes)
+      result = symbolizeDrawing(drawing, bytes.length, importOptions)
+    } else {
+      result = importCadFile(source, importOptions)
+    }
   } catch (error) {
-    // 解析器的报错本来就是写给人看的（「这是二进制 DWG，请另存为 DXF」），原样转 400。
-    throw badRequest(error instanceof Error ? error.message : 'DXF 解析失败')
+    // 解析器的报错本来就是写给人看的，原样转 400。
+    throw badRequest(error instanceof Error ? error.message : '图纸解析失败')
   }
 
   return {

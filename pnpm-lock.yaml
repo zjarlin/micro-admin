@@ -109,7 +109,11 @@ importers:
         specifier: ^3.5.0
         version: 3.5.44(typescript@5.9.3)
 
-  packages/cad-import: {}
+  packages/cad-import:
+    optionalDependencies:
+      '@mlightcad/libredwg-web':
+        specifier: 0.8.3
+        version: 0.8.3
 
   packages/data-page:
     dependencies:
@@ -290,6 +294,10 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mlightcad/libredwg-web@0.8.3':
+    resolution: {integrity: sha512-pvLjrBu6PlyMIe19cOiKw7JrdKeVZ9NctKYdgdbZB7uwAMN47on5mAFJIRdZ/rYWms+3e/0Mp5eqFWsT3SOldg==}
+    engines: {node: '>=20'}
 
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
@@ -1214,6 +1222,9 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@mlightcad/libredwg-web@0.8.3':
+    optional: true
 
   '@oxc-project/types@0.155.0': {}
 

@@ -38,5 +38,8 @@
         "default": "./dist/commands.js"
       }
     }
+  },
+  "optionalDependencies": {
+    "@mlightcad/libredwg-web": "0.8.3"
   }
 }
