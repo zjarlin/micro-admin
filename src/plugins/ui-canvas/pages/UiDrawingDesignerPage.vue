@@ -752,7 +752,6 @@ onBeforeUnmount(() => {
       <span>{{ canvasSize }}</span>
       <span>{{ Math.round(zoom * 100) }}%</span>
       <span class="dz-status__hint">Alt / 中键拖拽平移 · Ctrl+滚轮缩放 · 双击元素改属性</span>
-      <el-button v-if="selected" text size="small" class="dz-status__link" @click="openInspector('props')">属性</el-button>
     </div>
 
     <!-- ④ 元素操作浮条：选中后贴在画布底部居中，不再占用工具条宽度。 -->
@@ -1264,7 +1263,6 @@ onBeforeUnmount(() => {
 .dz-status__sep { width: 1px; height: 12px; background: var(--line); }
 .dz-status__grow { flex: 1 1 auto; }
 .dz-status__hint { color: var(--muted); opacity: .8; }
-.dz-status__link { height: 18px; padding: 0 4px; font-size: 11px; }
 
 /* ④ 选中浮条 */
 .dz-floating {
