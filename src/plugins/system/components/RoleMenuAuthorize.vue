@@ -132,8 +132,27 @@ async function open(): Promise<void> {
   if (error.value === null) {
     await nextTick()
     await nextTick()
-    treeRef.value?.setCheckedKeys(authorized.value, false)
+    treeRef.value?.setCheckedKeys(echoKeys(), false)
   }
+}
+
+/**
+ * 回显用的勾选键：只给叶子，父级交给 el-tree 自己算（整选 / 半选）。
+ *
+ * 存下来的 `menuIds` 里父级目录也在（保存时整选 + 半选一起写，否则子级会被孤立）。
+ * 但 el-tree 非严格模式下 `setCheckedKeys` 会把「父级 id」理解成「勾上它全部子级」，
+ * 于是回显出比实际授权更多的节点（保存一次就扩权）。只喂叶子即可看到真实范围。
+ */
+function echoKeys(): number[] {
+  const leafIds = new Set<number>()
+  const collect = (items: MenuNode[]): void => {
+    for (const item of items) {
+      if (item.children.length === 0) leafIds.add(item.id)
+      else collect(item.children)
+    }
+  }
+  collect(nodes.value)
+  return authorized.value.filter((id) => leafIds.has(id))
 }
 
 watch(() => [props.modelValue, props.role?.id] as const, ([open_, id]) => {
