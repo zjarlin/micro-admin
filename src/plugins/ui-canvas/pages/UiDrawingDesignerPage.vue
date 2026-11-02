@@ -15,7 +15,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, Delete, DocumentAdd, FullScreen, Link, MagicStick, MoreFilled, Promotion,
-  SortDown, SortUp, Stamp, View, ZoomIn, ZoomOut,
+  Setting, SortDown, SortUp, Stamp, View, ZoomIn, ZoomOut,
 } from '@element-plus/icons-vue'
 import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
@@ -460,6 +460,12 @@ function openInspector(tab: 'props' | 'bindings' | 'vibe' | 'compile' = 'props',
   inspectorOpen.value = true
 }
 
+/** 页面设置：先清掉选中，保证齿轮永远打开页面级设置而不是某个元素的属性。 */
+function openPageSettings(): void {
+  selectedIds.value = []
+  openInspector('props')
+}
+
 /** 弹窗标题：选中一个元素时显示角色与 id，否则是页面级设置。 */
 const inspectorTitle = computed(() => (selected.value
   ? `${selectedSpec.value?.label ?? '元素'} · ${selected.value.id}`
@@ -579,14 +585,15 @@ onBeforeUnmount(() => {
           <el-icon :size="15"><ArrowLeft /></el-icon>
         </button>
       </el-tooltip>
-      <button class="dz-title" type="button" :title="`${name || '未命名图纸'} · 点击编辑页面设置`" @click="openInspector('props')">
+      <!-- 标题只显示，不再兼「页面设置」入口：页面设置只由齿轮打开。 -->
+      <div class="dz-title" :title="name || '未命名图纸'">
         <strong>{{ name || '未命名图纸' }}</strong>
         <span class="dz-title__meta">
           <em :class="{ 'is-dirty': dirty }">{{ dirty ? '未保存' : `v${savedVersion}` }}</em>
           <em v-if="errors.length" class="is-error">{{ errors.length }} 处错误</em>
           <em v-else-if="unsupportedCount" class="is-warn">{{ unsupportedCount }} 处待扩展</em>
         </span>
-      </button>
+      </div>
 
       <span class="dz-divider" />
 
@@ -597,6 +604,11 @@ onBeforeUnmount(() => {
         <button class="dz-icon" type="button" :disabled="asking" @click="askAi">
           <el-icon :size="15" :class="{ 'is-spin': asking }"><MagicStick /></el-icon>
           <span v-if="questions.length" class="dz-badge">{{ questions.length }}</span>
+        </button>
+      </el-tooltip>
+      <el-tooltip content="页面设置：页面 key / 标题 / 列表接口 / 实体名" placement="bottom" :show-after="400">
+        <button class="dz-icon" type="button" @click="openPageSettings">
+          <el-icon :size="15"><Setting /></el-icon>
         </button>
       </el-tooltip>
       <el-tooltip content="编译检查与诊断" placement="bottom" :show-after="400">
@@ -1154,10 +1166,8 @@ onBeforeUnmount(() => {
 }
 .dz-title {
   display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 340px;
-  padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; cursor: pointer;
-  color: var(--app-text); font: inherit; text-align: left;
+  padding: 2px 8px; color: var(--app-text); font-size: 12px;
 }
-.dz-title:hover { background: var(--hover); }
 .dz-title strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dz-title__meta { display: inline-flex; gap: 6px; flex: 0 0 auto; }
 .dz-title__meta em { font-style: normal; font-size: 11px; color: var(--muted); }
