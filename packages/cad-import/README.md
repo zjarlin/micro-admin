@@ -1,0 +1,32 @@
+# @zjarlin/cad-import
+
+CAD 图纸（DXF / DWG）→ 组态画布：**本地解析**成实体、归类成组态图元、输出 `scada-dsl` 绘图指令集与摘要。
+无 UI 依赖；DXF 纯自写解析、零第三方 CAD 库，浏览器与 Node 都能直接用。
+
+```ts
+import { importCadFile } from '@zjarlin/cad-import'
+
+const result = importCadFile(dxfText, { canvas: { width: 1920, height: 1080 }, minSize: 6 })
+result.commands // 绘图指令集（交给 applyCommands 就是画布文档）
+result.digest   // 几十行摘要（给模型做语义补全，不必读原始 DXF）
+result.bytes    // { source, commands, digest }：省 token 的实测依据
+```
+
+三层可单独用：
+
+| 导出 | 作用 |
+| --- | --- |
+| `parseDxf` | DXF 文本 → 实体（LINE/POLYLINE/CIRCLE/ARC/ELLIPSE/TEXT/MTEXT/POINT/INSERT） |
+| `parseDwg` | DWG 字节 → 实体（**可选**，需要 `@mlightcad/libredwg-web`，运行时动态加载） |
+| `dwgToDrawing` | `DwgDatabase` → 实体（纯函数，不碰 wasm，可脱离依赖复用） |
+| `symbolize` | 实体 → 图元（矩形/管道/圆/三角/线段/文本 + 缩放居中 + 轴向合并） |
+| `shapesToCommands` / `shapesDigest` | 图元 → 绘图指令集 / 给模型看的摘要 |
+
+- **格式按字节判**：`detectCadFormat(bytes)` 用魔数（`AC10xx`）判 DWG / 二进制 DXF / ASCII DXF，不看扩展名；
+- **DWG 是可选的**：`@mlightcad/libredwg-web`（GPL-3.0，11MB wasm）放在 optionalDependencies，
+  没装时 `parseDwg` 抛「解析组件未安装」，DXF 链路照常工作。两条链共用 `geometry.ts` 与全部下游，
+  不存在第二套几何语义；
+- 编码：UTF-8 直读；GBK 图纸按字节传，由调用方用 `TextDecoder('gbk')` 解码；
+- 归类只用图元库里真实存在的 key（`basic.*` / `pipe.*`），不会产出画不出来的形状。
+
+用法与实测数字见宿主仓库的 `docs/CAD-IMPORT.md`。

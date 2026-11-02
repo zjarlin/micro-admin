@@ -3,3 +3,8 @@ packages:
   - 'packages/*'
 allowBuilds:
   '@parcel/watcher': true
+# DWG 解析（可选依赖 @mlightcad/libredwg-web）只能停在 0.8.3：
+# 0.8.0 / 0.8.1 / 0.8.2 的 wasm 一读文件就 "memory access out of bounds"（三个版本实测都会崩），
+# 0.8.3 才修好。它比默认冷却期新，因此按 pnpm 的精确版本豁免放行——只放这一个版本，不是放宽策略。
+minimumReleaseAgeExclude:
+  - '@mlightcad/libredwg-web@0.8.3'

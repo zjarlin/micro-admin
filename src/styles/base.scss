@@ -1,4 +1,9 @@
 :root {
+  /* 品牌与密度由后端主题（/ui/theme）覆盖，这里只是出厂值。 */
+  --brand: #2563eb;
+  --brand-soft: #eff6ff;
+  --accent: #22d3ee;
+  --content-pad: 28px;
   --app-bg: #f4f6fa;
   --app-text: #101828;
   --muted: #667085;
@@ -9,6 +14,41 @@
   --hover: #f1f5f9;
   --radius: 14px;
   color-scheme: light;
+  /*
+   * 侧栏是独立调色板，不跟着内容区的 surface 走。
+   * 浅色下是「白底深字」，深色下是「深海蓝底浅字」——两种模式各有各的样子，
+   * 而不是一种写死的深色。
+   *
+   * 这里只是出厂值：运行期由「界面外观」里的侧栏调色板覆盖
+   * （/ui/theme 的 sidebarLight / sidebarDark，见 src/shared/theme.ts 的 sidebarTokens）。
+   */
+  --sidebar-bg: #ffffff;
+  --sidebar-bg-soft: #f4f6fa;
+  --sidebar-line: #e8edf5;
+  --sidebar-line-strong: #cdd8e8;
+  --sidebar-text: #48566e;
+  --sidebar-text-strong: #0f172a;
+  --sidebar-muted: #94a3b8;
+  --sidebar-hover-bg: #f1f5f9;
+  --sidebar-active-bg: linear-gradient(90deg, color-mix(in srgb, var(--brand) 8%, #ffffff), color-mix(in srgb, var(--brand) 6%, #ffffff));
+  --sidebar-active-text: var(--brand);
+  --sidebar-active-bar: var(--brand);
+  --sidebar-scrollbar: rgba(100, 116, 139, .3);
+  --sidebar-badge-bg: var(--brand);
+  --sidebar-badge-text: #ffffff;
+
+  /*
+   * 让 Element Plus 的主色跟着品牌色走。
+   * 组件库用的是 primary / light-3…9 / dark-2 一组派生色，这里用 color-mix 现算，
+   * 换主题时不需要重新编译 SCSS。
+   */
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: color-mix(in srgb, var(--brand) 70%, #ffffff);
+  --el-color-primary-light-5: color-mix(in srgb, var(--brand) 50%, #ffffff);
+  --el-color-primary-light-7: color-mix(in srgb, var(--brand) 30%, #ffffff);
+  --el-color-primary-light-8: color-mix(in srgb, var(--brand) 20%, #ffffff);
+  --el-color-primary-light-9: color-mix(in srgb, var(--brand) 10%, #ffffff);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--brand) 80%, #000000);
 }
 
 html.dark {
@@ -21,6 +61,21 @@ html.dark {
   --line-strong: #334155;
   --hover: #1b2940;
   color-scheme: dark;
+  /* 侧栏深色调色板：与浅色同一组令牌，只换值。 */
+  --sidebar-bg: #0f172a;
+  --sidebar-bg-soft: #14203a;
+  --sidebar-line: rgba(148, 163, 184, .14);
+  --sidebar-line-strong: rgba(148, 163, 184, .3);
+  --sidebar-text: #a9b6c9;
+  --sidebar-text-strong: #f8fafc;
+  --sidebar-muted: #7d8da4;
+  --sidebar-hover-bg: rgba(148, 163, 184, .1);
+  --sidebar-active-bg: linear-gradient(90deg, rgba(59, 130, 246, .26), rgba(34, 211, 238, .08));
+  --sidebar-active-text: #f8fafc;
+  --sidebar-active-bar: #38bdf8;
+  --sidebar-scrollbar: rgba(148, 163, 184, .3);
+  --sidebar-badge-bg: #1d4ed8;
+  --sidebar-badge-text: #ffffff;
 
   /* 让 Element Plus 组件跟随宿主设计变量，而不是官方纯黑暗色底。 */
   --el-bg-color: var(--surface);
@@ -43,11 +98,26 @@ html.dark {
   --el-table-header-bg-color: var(--surface-soft);
   --el-table-row-hover-bg-color: var(--hover);
   --el-table-border-color: var(--line);
+
+  /* 深色下 Element 的浅色派生拉向深底，再按品牌色重算一遍。 */
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: color-mix(in srgb, var(--brand) 70%, #0d1424);
+  --el-color-primary-light-5: color-mix(in srgb, var(--brand) 50%, #0d1424);
+  --el-color-primary-light-7: color-mix(in srgb, var(--brand) 30%, #0d1424);
+  --el-color-primary-light-8: color-mix(in srgb, var(--brand) 20%, #0d1424);
+  --el-color-primary-light-9: color-mix(in srgb, var(--brand) 10%, #0d1424);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--brand) 80%, #ffffff);
 }
 
 * { box-sizing: border-box; }
-html, body, #app { min-height: 100%; margin: 0; }
+/* 应用外壳自己管滚动：文档本身不滚，避免「页面长大、侧栏跟着跑」。
+   只有 .content-area 与显式声明的面板内部会滚动。 */
+html, body, #app { height: 100%; margin: 0; overflow: hidden; }
 body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--app-bg); color: var(--app-text); -webkit-font-smoothing: antialiased; }
+/* 内容区滚动条收窄一点，避免遮住卡片圆角。 */
+.content-area { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.content-area::-webkit-scrollbar { width: 8px; }
+.content-area::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 button, input { font: inherit; }
 a { color: inherit; }
 code { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }

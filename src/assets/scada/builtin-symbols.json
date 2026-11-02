@@ -1,6 +1,174 @@
 {
-  "version": 1,
+  "version": 2,
   "symbols": [
+    {
+      "key": "basic.line",
+      "name": "线段",
+      "category": "basic",
+      "defaultWidth": 200,
+      "defaultHeight": 8,
+      "description": "基础线段：拖拽绘制，方向随拖动走；线宽固定 2px，改颜色用「线色」",
+      "palette": {
+        "stroke": "#94a3b8"
+      },
+      "props": [
+        {
+          "key": "stroke",
+          "label": "线色",
+          "kind": "color",
+          "default": "#94a3b8",
+          "group": "外观"
+        }
+      ],
+      "parts": [
+        {
+          "id": "line",
+          "shape": "line",
+          "frame": {
+            "x": 0,
+            "y": 0.5,
+            "width": 1,
+            "height": 0
+          },
+          "fill": "none",
+          "stroke": "stroke",
+          "strokeWidth": 2,
+          "points": [
+            [
+              0,
+              0.5
+            ],
+            [
+              1,
+              0.5
+            ]
+          ]
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "basic.ellipse",
+      "name": "圆 / 椭圆",
+      "category": "basic",
+      "defaultWidth": 120,
+      "defaultHeight": 120,
+      "description": "基础圆形：按住拖拽即成为椭圆，可填色、描边",
+      "palette": {
+        "body": "#1e293b",
+        "border": "#475569"
+      },
+      "props": [
+        {
+          "key": "fillColor",
+          "label": "填充色",
+          "kind": "color",
+          "default": "#1e293b",
+          "group": "外观"
+        },
+        {
+          "key": "strokeColor",
+          "label": "边框色",
+          "kind": "color",
+          "default": "#475569",
+          "group": "外观"
+        },
+        {
+          "key": "strokeWidth",
+          "label": "边框宽度",
+          "kind": "number",
+          "default": 1,
+          "group": "外观",
+          "min": 0,
+          "max": 8
+        }
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "shape": "ellipse",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "fillColor",
+          "stroke": "strokeColor",
+          "strokeWidth": 1,
+          "cornerRadius": 0
+        }
+      ],
+      "ports": []
+    },
+    {
+      "key": "basic.triangle",
+      "name": "三角形",
+      "category": "basic",
+      "defaultWidth": 120,
+      "defaultHeight": 100,
+      "description": "基础三角形：流程图与区域标注常用",
+      "palette": {
+        "body": "#1e293b",
+        "border": "#475569"
+      },
+      "props": [
+        {
+          "key": "fillColor",
+          "label": "填充色",
+          "kind": "color",
+          "default": "#1e293b",
+          "group": "外观"
+        },
+        {
+          "key": "strokeColor",
+          "label": "边框色",
+          "kind": "color",
+          "default": "#475569",
+          "group": "外观"
+        },
+        {
+          "key": "strokeWidth",
+          "label": "边框宽度",
+          "kind": "number",
+          "default": 1,
+          "group": "外观",
+          "min": 0,
+          "max": 8
+        }
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "shape": "polygon",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "fill": "fillColor",
+          "stroke": "strokeColor",
+          "strokeWidth": 1,
+          "points": [
+            [
+              0.5,
+              0.02
+            ],
+            [
+              0.98,
+              0.98
+            ],
+            [
+              0.02,
+              0.98
+            ]
+          ],
+          "cornerRadius": 0
+        }
+      ],
+      "ports": []
+    },
     {
       "key": "basic.rect",
       "name": "矩形",

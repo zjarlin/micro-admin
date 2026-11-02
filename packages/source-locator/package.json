@@ -1,0 +1,21 @@
+{
+  "name": "@zjarlin/source-locator",
+  "version": "0.1.0",
+  "description": "浏览器元素拾取定位到源码：编译期把 template 元素位置写进 DOM，运行期提供 Chrome 式取色器/拾取器与 Vue 组件链解析（无业务符号，可直接被别的项目依赖）",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["src", "README.md"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./vite": "./src/vite.ts",
+    "./browser": "./src/browser.ts",
+    "./location": "./src/location.ts"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vite": "^8.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

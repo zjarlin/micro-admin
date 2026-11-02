@@ -2,7 +2,7 @@
 //
 // 与 UI 无关，只依赖 SQLite 与共享的 scada 类型/图元库，
 // 因此可以整体搬到别的项目里（换存储只改 kv 注入）。
-import { RawResponse, type KeyValueStore } from '@zjarlin/ui-server'
+import { RawResponse, type ExtensionRequest, type KeyValueStore } from '@zjarlin/ui-server'
 import {
   buildPlan,
   renderPlanIsometric,
@@ -12,6 +12,7 @@ import {
   type ExtrusionPlan,
 } from '../../../src/shared/scada/ifc.ts'
 import { aiStatusOf, requestExtrusionDecisions, type ExtrusionAiOptions } from './ai.ts'
+import { applyCadCommands, importCad } from './cad.ts'
 import {
   createEmptyScadaDocument,
   parseScadaDocument,
@@ -64,13 +65,12 @@ export interface ScadaServiceOptions {
 }
 
 export interface ScadaService {
+  /** 图元库只读视图：AI 插件据此生成指令，保证「能画的」和「能说的」一致。 */
+  readonly symbols: ScadaSymbolDefinition[]
+  /** 点位目录只读视图（同上）。 */
+  readonly tags: ScadaTagOption[]
   /** 异步：缺参追问要等模型返回，其余分支仍然同步完成。 */
-  handle(request: {
-    method: string
-    path: string
-    query: URLSearchParams
-    body: Record<string, unknown>
-  }): Promise<unknown | typeof UNHANDLED>
+  handle(request: ExtensionRequest): Promise<unknown | typeof UNHANDLED>
 }
 
 export const UNHANDLED = Symbol('scada-unhandled')
@@ -223,6 +223,12 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
   }
 
   return {
+    get symbols() {
+      return options.symbols
+    },
+    get tags() {
+      return options.tags
+    },
     async handle(request): Promise<unknown | typeof UNHANDLED> {
       const { method, path, query } = request
       // GET 没有请求体：统一按空对象处理，避免扩展层各写一遍空值判断。
@@ -315,6 +321,19 @@ export function createScadaService(options: ScadaServiceOptions): ScadaService {
         state.screens = state.screens.filter((screen) => screen.id !== screenId)
         save(state)
         return { deleted: before - state.screens.length }
+      }
+
+      // ---------------- CAD 图纸导入（DXF/DWG → 绘图指令集） ----------------
+
+      if (path === '/scada/cad/import' && method === 'POST') {
+        // 不落库：前端先预览指令与体积对比，确认后再写画面。
+        // DWG 要走 libredwg 的 WASM（异步动态加载），DXF 也是同一个入口。
+        return await importCad(body)
+      }
+
+      if (path === '/scada/cad/apply' && method === 'POST') {
+        // 与 /ai/draw 同一个执行器：CAD 导入的画面和 AI 画的画面语义一致。
+        return applyCadCommands(body, options.symbols, options.tags)
       }
 
       if (path === '/scada/validate' && method === 'POST') {

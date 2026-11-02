@@ -6,7 +6,7 @@
 // 前端下一次拉 `/ui/pages` 就自动多出路由与菜单，不需要发版。
 
 import type { PageRegistry } from '@zjarlin/data-page'
-import { RawResponse, type KeyValueStore } from '@zjarlin/ui-server'
+import { RawResponse, type ExtensionRequest, type KeyValueStore } from '@zjarlin/ui-server'
 import {
   compileDrawing,
   createEmptyDrawing,
@@ -19,11 +19,23 @@ import {
   type UiQuestion,
 } from '../../../packages/ui-canvas/src/index.ts'
 import { seedDrawings } from './seed.ts'
-import {
-  askForArray,
-  sub2apiStatusOf,
-  type Sub2apiOptions,
-} from '../../lib/sub2api.ts'
+
+/** AI 补全能力：由宿主注入；null 表示未启用（只用规则表 + 手工填）。 */
+export interface UiCanvasAiClient {
+  /** 界面展示用的状态（绝不含密钥）。 */
+  status: UiCanvasAiStatus
+  /** 把「问题清单」交给模型，拿回答案数组。 */
+  ask(instruction: string, payload: unknown): Promise<unknown[]>
+}
+
+export interface UiCanvasAiStatus {
+  enabled: boolean
+  model: string
+  baseUrl: string
+  background: boolean
+}
+
+const AI_OFF: UiCanvasAiStatus = { enabled: false, model: '', baseUrl: '', background: false }
 
 interface StoredDrawing {
   id: number
@@ -52,17 +64,12 @@ export interface UiCanvasServiceOptions {
   /** 页面注册表：发布就是把编译结果 upsert 进去。 */
   registry: PageRegistry
   namespace?: string
-  /** AI 补全配置；null / 缺省表示未启用（只用规则表 + 手工填）。 */
-  ai?: Sub2apiOptions | null | undefined
+  /** AI 补全客户端；null / 缺省表示未启用（只用规则表 + 手工填）。 */
+  ai?: UiCanvasAiClient | null | undefined
 }
 
 export interface UiCanvasService {
-  handle(request: {
-    method: string
-    path: string
-    query: URLSearchParams
-    body: Record<string, unknown>
-  }): Promise<unknown | typeof UNHANDLED>
+  handle(request: ExtensionRequest): Promise<unknown | typeof UNHANDLED>
 }
 
 export const UNHANDLED = Symbol('ui-canvas-unhandled')
@@ -336,7 +343,7 @@ export function createUiCanvasService(options: UiCanvasServiceOptions): UiCanvas
           diagnostics,
           questions: compiled.questions,
           analysis: compiled.analysis,
-          ai: sub2apiStatusOf(ai),
+          ai: ai?.status ?? AI_OFF,
           blocked: diagnostics.some((item) => item.level === 'error'),
         }
       }
@@ -382,12 +389,12 @@ export function createUiCanvasService(options: UiCanvasServiceOptions): UiCanvas
       // ---------------- AI 补全 ----------------
 
       if (path === '/ui-canvas/drawing/ask' && method === 'POST') {
-        if (!ai) throw errorOf('AI 未启用：缺少 SUB2API_API_KEY', 400)
+        if (!ai) throw errorOf('AI 未启用：先配好 AI_BASE_URL / AI_API_KEY（与 codex 同一个 sub2api 网关）', 400)
         const record = requireDrawing(state, Number(body.id ?? 0))
         const drawing = parseDrawing(record.drawingJson, record.name)
         const { compiled } = diagnose(drawing)
         if (!compiled.questions.length) {
-          return { applied: 0, skipped: [], questions: [], ai: { ...sub2apiStatusOf(ai), called: false }, schema: compiled.schema }
+          return { applied: 0, skipped: [], questions: [], ai: { ...ai.status, called: false }, schema: compiled.schema }
         }
         const instruction = [
           '你是后台管理系统的页面配置助手。下面是一份「图纸 → 页面」编译时发现的缺失字段清单。',
@@ -396,11 +403,7 @@ export function createUiCanvasService(options: UiCanvasServiceOptions): UiCanvas
           'options / request / resolveFrom 这类结构化字段直接给对象或数组，不要写成字符串。',
           '字段名必须是英文驼峰，中文只出现在 label。不要编造接口路径以外的东西。',
         ].join('\n')
-        const { items, mode } = await askForArray(
-          ai,
-          { instruction, payload: compiled.questions },
-          (raw) => (Array.isArray(raw) ? raw : []),
-        )
+        const items = await ai.ask(instruction, compiled.questions)
         const answers = items
           .filter((item): item is { questionId: string; value: unknown } =>
             Boolean(item) && typeof item === 'object' && typeof (item as { questionId?: unknown }).questionId === 'string')
@@ -418,7 +421,7 @@ export function createUiCanvasService(options: UiCanvasServiceOptions): UiCanvas
           schema: after.compiled.schema,
           analysis: after.compiled.analysis,
           drawingJson: record.drawingJson,
-          ai: { ...sub2apiStatusOf(ai), called: true, mode, answered: result.applied },
+          ai: { ...ai.status, called: true, mode: 'sync', answered: result.applied },
         }
       }
 

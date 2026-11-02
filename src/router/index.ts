@@ -56,6 +56,9 @@ export async function bootKernel(plugins?: PluginDefinition[]): Promise<MicroKer
     onError: (pluginId, error) => console.error(`[kernel] plugin ${pluginId} failed`, error),
   })
   kernel.provideService('http', http)
+  // 路由实例作为宿主能力注入：插件只能读当前路径（例如页面助手的路径白名单），
+  // 不 import 宿主 router 模块，也不自己 addRoute。
+  kernel.provideService('router', router)
   await kernel.start()
   return kernel
 }

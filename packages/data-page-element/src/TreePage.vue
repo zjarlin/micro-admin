@@ -30,6 +30,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  /** `kind: 'custom'` 的行动作：宿主接手（如角色行的「授权菜单」弹层）。 */
+  (event: 'action', payload: { key: string; row: Row }): void
   /** 活元素的 `emit` 动作：宿主可挂总线或埋点。 */
   (event: 'vibe', payload: { channel: string; payload: unknown; row: Row }): void
 }>()
@@ -88,6 +90,7 @@ const actions = computed(() => resolveActions(http, defaultActions(props.schema.
     else form.openCreate()
   },
   openEdit: (row) => form.openEdit(row),
+  custom: (action, row) => emit('action', { key: action.key, row }),
   reload: () => tree.load(),
   can,
   notifier,

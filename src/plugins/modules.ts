@@ -21,4 +21,8 @@ export const pluginModules: Record<string, PluginModuleRef> = {
   'ui-canvas': { file: '/src/plugins/ui-canvas', export: 'uiCanvasPlugin' },
   shell: { file: '/src/plugins/shell', export: 'shellPlugin' },
   pages: { file: '/src/plugins/pages', export: 'pagesPlugin' },
+  ai: { file: '/src/plugins/ai', export: 'aiPlugin' },
+  theme: { file: '/src/plugins/theme', export: 'themePlugin' },
+  'page-agent': { file: '/src/plugins/page-agent', export: 'pageAgentPlugin' },
+  'source-finder': { file: '/src/plugins/source-finder', export: 'sourceFinderPlugin' },
 }

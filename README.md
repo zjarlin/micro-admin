@@ -1,11 +1,21 @@
-# Micro Admin
+# Micro Admin（微内核后台）
 
-一个 Vue 3 + Vite + TypeScript 的微内核后台管理系统。内核只负责插件发现、依赖排序、启停、路由/菜单/服务/命令/槽位编排与资源回收；登录、工作台、系统管理、系统监控都以插件形式接入，业务能力对标若依常用后台模块。
+一个 Vue 3 + Vite + TypeScript 的微内核后台管理系统。内核只负责插件发现、依赖排序、启停、
+路由/菜单/服务/命令/槽位编排与资源回收；登录、工作台、系统管理、系统监控都以插件形式接入，
+业务能力对标若依常用后台模块。**外壳本身也是「图纸」**：侧栏、顶栏、内容区由后端下发的
+`ShellSchema` 渲染（`/shell/config`），改外壳 = 改图纸 + 发布，不需要改本仓库代码、也不需要发版。
 
 后台页面是**配置驱动**的：一份 schema 描述查询、列、表单、行操作与左树，前端不需要为每个页面写 `.vue`，后端用同一个引擎提供列表与增删改查。仓库自带 TypeScript 后端（Hono + `node:sqlite`），`node server/main.ts` 即可独立运行。
 
-通用页面层已抽成三个可被别的项目直接依赖的工作区包：`@zjarlin/data-page`（契约/引擎/状态机）、
-`@zjarlin/data-page-element`（Element Plus 壳）、`@zjarlin/ui-server`（HTTP + SQLite）。详见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
+通用页面层已抽成可被别的项目直接依赖的工作区包：`@zjarlin/data-page`（契约/引擎/状态机）、
+`@zjarlin/data-page-element`（Element Plus 壳）、`@zjarlin/ui-server`（HTTP + SQLite）、
+`@zjarlin/ui-canvas`（2D 图纸 → 页面/外壳）、`@zjarlin/nav-tree`（任意层级折叠导航树）。
+详见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
+
+组态相关的三个包同样是「能单独搬走」的：`@zjarlin/scada-dsl`（绘图指令集：语法/解析/执行/文档摘要）、
+`@zjarlin/ifc-canvas`（画面 → IFC4 BIM）、`@zjarlin/cad-import`（DXF/DWG 图纸 → 组态图元 + 绘图指令集）。
+详见 [`docs/SCADA-CANVAS.md`](docs/SCADA-CANVAS.md)、[`docs/SCADA-IFC.md`](docs/SCADA-IFC.md)、
+[`docs/CAD-IMPORT.md`](docs/CAD-IMPORT.md)。
 
 演示账号：
 
@@ -90,7 +100,8 @@ Vue 宿主
   │   ├─ 服务容器（service token）
   │   ├─ 命令总线（command）
   │   ├─ 事件总线（event）
-  │   └─ 贡献注册表（route / menu / slot / widget）
+  │   └─ 贡献注册表（route / menu / slot / widget / setting）
+  ├─ 外壳：ShellSchema（后端下发）→ ShellFrame 渲染，改外壳 = 改图纸 + 发布
   ├─ 插件：core-admin   登录、工作台、插件中心、个人中心
   ├─ 插件：user         用户表与账号（可单独打包，不依赖 RBAC）
   ├─ 插件：rbac         角色/部门/岗位/菜单（可选；装了才给用户页补部门与角色）
@@ -131,6 +142,15 @@ VITE_PLUGIN_PROFILE=desktop pnpm build:desktop  # 出桌面档位产物
 
 插件开发细节见 [`docs/PLUGIN.md`](docs/PLUGIN.md)。
 
+## 找到某个页面的源码
+
+顶栏的「瞄准」按钮（**⌘/Ctrl + ⇧ + E**）是元素拾取器：激活后点页面上任何元素，
+直接给出 `文件:行:列`、组件链，以及「这一页由哪份 schema / 哪个插件提供」。
+配置驱动的页面没有业务 `.vue`，靠这条信息才不会在通用壳里白找。
+
+编译期把位置写进 DOM（`data-source-loc`），所以生产站点同样可用，不依赖 sourcemap。
+细节与边界见 [`docs/SOURCE-LOCATOR.md`](docs/SOURCE-LOCATOR.md)。
+
 ## 目录结构
 
 ```text
@@ -138,6 +158,12 @@ packages/                     # 可被别的项目依赖的工作区包
   data-page/                  # 契约、CRUD 引擎、页面注册表、状态机、运行期接口（无 UI）
   data-page-element/          # Element Plus 适配：表格/查询栏/表单弹窗/左树
   ui-server/                  # Hono 外壳 + zod 配置 + node:sqlite 存储
+  ui-canvas/                  # 2D 图纸 → 页面/外壳：语义编译器 + vibeelement（可独立发布）
+  nav-tree/                   # 任意层级导航树：森林构建/过滤/展开 + 无业务渲染组件
+  scada-dsl/                  # 组态指令集（绘图 + 排版 + 画布），无 UI 依赖，可单独发布
+  ifc-canvas/                 # 组态画面 → IFC4 BIM（ISO 16739）：映射、缺参检测、SPF 与轴测预览
+  cad-import/                 # DXF/DWG 图纸 → 组态图元与绘图指令集
+  source-locator/             # 元素 → 源码定位：编译期注入位置 + 浏览器拾取器，无业务符号
 src/
   kernel/                     # 与业务无关的微内核
   plugins/
@@ -149,7 +175,14 @@ src/
     settings/                 # 参数设置、通知公告
     monitor/                  # 系统监控模块
     scada/                    # 组态画布工作台
-    pages/                    # 把后端登记的页面变成路由与菜单
+    canvas/                   # 画布宿主：一列页签 + 一块舞台，页面由各插件贡献
+    source-finder/            # 元素拾取器（顶栏图标 + ⌘/Ctrl+⇧+E，定位源码）
+    ai/                       # AI 插件：提示词库、画布指令生成、页面/主题生成
+    theme/                    # 外观主题：颜色/圆角/密度（贡献到系统设置）
+    page-agent/               # 页面助手：alibaba/page-agent 的宿主与设置区
+    settings/                 # 参数设置、通知公告 + 系统设置聚合页
+    shell/                    # 外壳设计器：画布画外壳，发布即改运行期外壳
+    pages/                    # 把后端登记的页面变成路由与菜单（含页面工厂）
   schema/                     # 本仓库的页面 schema 基线 + 种子数据
   layouts/                    # 管理后台壳
   router/                     # 内核启动、路由编译、登录/权限守卫
@@ -203,7 +236,8 @@ SERVER_PORT=5181 DB_FILE=/root/DockerCompose/micro-admin/data/ui.db node server/
 
 schema 字段、HTTP 契约、包依赖方式与已知边界见 [`docs/DATA-PAGE.md`](docs/DATA-PAGE.md)。
 
-别的项目依赖这三个包时，仓库内直接跑源码 TS；对外发布先出产物：
+别的项目依赖这几个包时，仓库内直接跑源码 TS；`data-page` / `ui-server` 对外发布先出产物
+（`ui-canvas` / `data-page-element` 是 Vue 源码包，由消费方 Vite 编译）：
 
 ```bash
 pnpm build:packages     # packages/{data-page,ui-server} → dist/*.{js,d.ts}
@@ -214,10 +248,21 @@ pnpm build:packages     # packages/{data-page,ui-server} → dist/*.{js,d.ts}
 ## 已实现的后台能力
 
 - 登录/退出、会话恢复、Token 注入、登录后重定向。
-- 动态菜单、菜单搜索、侧栏折叠、暗色主题、面包屑。
+- **外壳由图纸下发**：侧栏（品牌/菜单/搜索/收起）、顶栏（面包屑/图标行/用户区）、内容区、
+  全出血页都由后端下发的 `ShellSchema` 渲染；「外壳设计」里画完 + 发布即生效，不需要改代码、不需要发版。
+  顶栏图标是一等元素，点击动作（跳转/请求/命令/派发/弹窗）在画布上配；停用插件即其命令消失、图标不渲染。
+- 动态菜单、菜单搜索、暗色主题、面包屑、右侧属性/AI 面板（组态页内，非全站右栏）。
 - 用户、角色、菜单、部门、岗位、字典、参数、公告、定时任务、设备台账全部由 schema 驱动：
   查询、分页、左树筛选（含下级）、表单校验、唯一性、删除保护、跨资源取值都在同一层实现。
 - 在线用户、服务监控、缓存监控；组态画布工作台。
+- AI 插件：提示词即配置（画布绘制/排版、页面 schema、外观 token），一条自然语言指令直接改画布；
+  另有「页面工厂」把原型描述变成可上线页面、「外观主题」可视化调色并支持 AI 生成。见 [`docs/AI-PLUGIN.md`](docs/AI-PLUGIN.md)。
+- 页面助手（`page-agent` 插件）：把 [alibaba/page-agent](https://github.com/alibaba/page-agent) 装成可停用能力，
+  用自然语言操作当前页面；模型与密钥留在后端经同源代理调用，顶栏 AI 入口、面板外观、步数、路径白名单、
+  脱敏规则、页面指令全部在「系统工具 → 系统设置 → 页面助手」里配。见 [`docs/PAGE-AGENT.md`](docs/PAGE-AGENT.md)。
+- 系统设置（`settings` 插件）：设置页本身也是插件，标签页与表单来自各插件的 `ctx.settings` 贡献；
+  字段类型（文本/数字/开关/下拉/颜色/密钥/标签/记录表/JSON）与必填校验由内核统一渲染，
+  停用插件即整块消失。见 [`docs/PLUGIN.md`](docs/PLUGIN.md) 的「设置贡献」。
 - 插件中心：依赖拓扑、启停、运行期错误面板、服务与命令清单。
 - 工作台：指标卡、趋势图、部门分布、公告、最近操作、插件槽位注入的健康卡片。
 

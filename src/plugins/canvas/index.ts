@@ -15,7 +15,7 @@ export const canvasPlugin: PluginDefinition = {
   name: '画布',
   version: '1.0.0',
   description: '画布类页面的统一入口：组态画布、画面库、图纸库、3D 预览用页签切换。',
-  author: 'Microkernel Admin',
+  author: 'Micro Admin',
   requires: ['core-admin'],
   optionalRequires: ['scada', 'ui-canvas'],
   defaultEnabled: true,

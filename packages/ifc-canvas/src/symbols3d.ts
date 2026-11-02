@@ -1,6 +1,6 @@
 // 绘图指令集 → 3D 规格的规则表（L0：零 token 也能出模型）。
 //
-// 15 个内置图元逐条给出「厚度策略 / 离地高度 / 材质 / 几何形式」，
+// 18 个内置图元逐条给出「厚度策略 / 离地高度 / 材质 / 几何形式」，
 // 并对回转体（泵、电机、储罐、阀门、管道）按部件覆盖。规则命中就不问模型；
 // 只有规则表覆盖不到的自定义图元才进 `plan.ts` 的缺失清单追问 AI。
 //
@@ -42,6 +42,16 @@ export const SYMBOL_3D_RULES: Record<string, Symbol3DRule> = {
     elevation: 1500,
     material: 'none',
     textMode: 'decal',
+  },
+  // 线段是纯装饰：轮廓是开放折线，拉伸没有意义。显式登记成 skip，
+  // 否则会落到 basic 分类兜底规则上，导出时每个线段都报一条「轮廓不可用」。
+  'basic.line': {
+    role: 'label',
+    form: 'skip',
+    depthRule: mm(0),
+    elevation: 0,
+    material: 'none',
+    textMode: 'skip',
   },
   'display.value': {
     role: 'instrument',

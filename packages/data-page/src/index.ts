@@ -90,7 +90,15 @@ export type {
   ServerMetric,
   SessionUser,
 } from './runtime-types.ts'
-export type { RuntimeApi, RuntimeData, RuntimeReply, RuntimeRequest, RuntimeStore } from './runtime-api.ts'
+export type {
+  RuntimeApi,
+  RuntimeApiOptions,
+  RuntimeData,
+  RuntimeReply,
+  RuntimeRequest,
+  RuntimeStore,
+  SessionResolver,
+} from './runtime-api.ts'
 export {
   ADMIN,
   AUDITOR,

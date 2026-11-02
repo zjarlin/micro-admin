@@ -65,6 +65,8 @@ const groups = computed<ShellMenuGroup[]>(() => {
     .map(([name, items]) => ({
       name,
       items: items
+        // 目录节点（只有子项、没有 path）不是可点的导航项：侧栏菜单只画叶子页面。
+        .filter((item): item is MenuContribution & { path: string } => Boolean(item.path))
         .filter((item) => !keyword || item.title.toLowerCase().includes(keyword))
         .map((item) => ({
           id: item.id,
@@ -98,11 +100,35 @@ const context = computed<ShellViewContext>(() => ({
 }))
 
 /** 顶栏右排里的用户区不允许被图纸藏掉：它是登录态的唯一出口。 */
-const topbarRight = computed(() => schema.value.topbar.right.filter(allowed))
+const topbarRight = computed(() => schema.value.topbar.right.filter(visible))
 
-/** 权限过滤：条目声明了权限码且当前用户没有时，直接不渲染（连位置都不占）。 */
-function allowed(item: { permission?: string } | undefined): boolean {
-  return Boolean(item) && session.can(item?.permission)
+/**
+ * 内核命令清单（顶栏图标可用性判定用）。
+ *
+ * 外壳不认识具体插件，只问「这条命令还在不在」；`kernelStore.statuses` 是响应式依赖，
+ * 插件在插件中心启停后顶栏图标随之出现/消失，不需要重新加载页面。
+ */
+const commandNames = computed<readonly string[]>(() => {
+  void kernelStore.statuses
+  return getKernel()?.contextFor('core-admin')?.commands.list() ?? []
+})
+
+/**
+ * 图标可见性：权限 + 命令可用性。
+ *
+ * 顶栏插件入口（页面助手 / 元素定位 / …）由图纸声明为「点击执行某条命令」，
+ * 命令随插件启停消失——所以停用插件后图标自然不渲染，外壳不需要为它们维护任何槽位。
+ * 未声明命令的图标（兜底）不受影响。
+ */
+function visible(item: { permission?: string; action?: { kind?: string; params?: Record<string, unknown> } } | undefined): boolean {
+  if (!item) return false
+  if (!session.can(item.permission)) return false
+  const action = item.action
+  if (action?.kind === 'command') {
+    const name = typeof action.params?.name === 'string' ? action.params.name : ''
+    return Boolean(name) && commandNames.value.includes(name)
+  }
+  return true
 }
 
 onMounted(() => {
@@ -156,31 +182,31 @@ async function onUserCommand(command: string): Promise<void> {
     >
       <div class="shell-sidebar__head" :style="{ height: `${schema.frame.topbarHeight}px` }">
         <ShellElementView
-          v-if="allowed(schema.sidebar.brand)"
+          v-if="visible(schema.sidebar.brand)"
           :item="schema.sidebar.brand!"
           :ctx="context"
           @activate="onActivate($event)"
         />
       </div>
 
-      <div v-if="allowed(schema.sidebar.search)" class="shell-sidebar__search">
+      <div v-if="visible(schema.sidebar.search)" class="shell-sidebar__search">
         <ShellElementView :item="schema.sidebar.search!" :ctx="context" @activate="onActivate($event)" />
       </div>
 
       <el-scrollbar class="shell-sidebar__scroll">
         <ShellElementView
-          v-if="allowed(schema.sidebar.menu)"
+          v-if="visible(schema.sidebar.menu)"
           :item="schema.sidebar.menu!"
           :ctx="context"
           @activate="onActivate($event)"
         />
         <!-- 侧栏私有自定义条目：菜单之外的自定义图标。 -->
-        <div v-for="item in schema.sidebar.items.filter((entry) => shellItemClickable(entry) && allowed(entry))" :key="item.id" class="shell-sidebar__extra">
+        <div v-for="item in schema.sidebar.items.filter((entry) => shellItemClickable(entry) && visible(entry))" :key="item.id" class="shell-sidebar__extra">
           <ShellElementView :item="item" :ctx="context" @activate="onActivate($event)" />
         </div>
       </el-scrollbar>
 
-      <div v-if="allowed(schema.sidebar.collapse)" class="shell-sidebar__foot">
+      <div v-if="visible(schema.sidebar.collapse)" class="shell-sidebar__foot">
         <ShellElementView :item="schema.sidebar.collapse!" :ctx="context" @activate="onActivate($event)" />
       </div>
     </aside>
@@ -196,7 +222,7 @@ async function onUserCommand(command: string): Promise<void> {
             <el-icon :size="18"><component :is="ui.collapsed ? 'Expand' : 'Fold'" /></el-icon>
           </el-button>
           <!-- 靠左条目：面包屑 / 自定义文本 / 图标。 -->
-          <template v-for="item in schema.topbar.left.filter(allowed)" :key="item.id">
+          <template v-for="item in schema.topbar.left.filter(visible)" :key="item.id">
             <!-- 全出血页（设计器/运行预览）自带标题，不再重复一条面包屑。 -->
             <ShellElementView
               v-if="!fullBleed || item.role !== 'breadcrumb'"

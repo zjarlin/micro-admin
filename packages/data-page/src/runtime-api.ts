@@ -196,11 +196,32 @@ export interface RuntimeApi {
 }
 
 /**
+ * 会话解析钩子：把「令牌 → 静态用户」升级成「令牌 → 按角色授权算权限」。
+ *
+ * 放在宿主注入而不是写死在这里：`system.roles` / `system.menus` 是宿主业务表，
+ * 通用层不该认识它们。返回 `null` 表示不接管，沿用静态用户。
+ */
+export type SessionResolver = (user: SessionUser) => SessionUser | null
+
+export interface RuntimeApiOptions {
+  /** 登录与 `/auth/profile` 共用同一条解析，避免「登录时一套权限、请求时另一套」。 */
+  resolveUser?: SessionResolver | undefined
+}
+
+/**
  * 创建运行期接口。
  *
  * `engine` 只用于读取真实资源（用户/角色/公告），保证工作台数字与列表页一致。
  */
-export function createRuntimeApi(engine: PageEngine, store: RuntimeStore): RuntimeApi {
+export function createRuntimeApi(
+  engine: PageEngine,
+  store: RuntimeStore,
+  options: RuntimeApiOptions = {},
+): RuntimeApi {
+  const resolveUser = options.resolveUser
+  /** 静态用户先过一遍宿主的解析：角色授权改了，下一次请求就按新范围判权限。 */
+  const asSession = (user: SessionUser | null): SessionUser | null =>
+    user && resolveUser ? (resolveUser(user) ?? user) : user
   function ensure(): RuntimeData {
     const existing = store.read()
     if (existing) return existing
@@ -222,16 +243,20 @@ export function createRuntimeApi(engine: PageEngine, store: RuntimeStore): Runti
         const payload = body as unknown as LoginPayload
         if (payload.username === 'admin' && payload.password === 'admin123') {
           const data = ensure()
+          const session = asSession(ADMIN) ?? ADMIN
           data.loginLogs.unshift({
             id: nextId(data.loginLogs), username: 'admin', ip: '127.0.0.1', location: '本机',
             browser: request.userAgent.includes('Safari') ? 'Safari' : 'Chrome', os: request.userAgent,
             status: 'success', message: '登录成功', createdAt: new Date().toISOString(),
           })
           store.write(data)
-          return { status: 200, data: { token: TOKEN_ADMIN, user: ADMIN } satisfies LoginResult, token: TOKEN_ADMIN }
+          return { status: 200, data: { token: TOKEN_ADMIN, user: session } satisfies LoginResult, token: TOKEN_ADMIN }
         }
         if (payload.username === 'auditor' && payload.password === 'audit123') {
-          return { status: 200, data: { token: TOKEN_AUDITOR, user: AUDITOR } satisfies LoginResult, token: TOKEN_AUDITOR }
+          // 先 `ensure()`：首次登录时角色表可能还没落盘，不先播种就会读到空表退回静态权限。
+          ensure()
+          const session = asSession(AUDITOR) ?? AUDITOR
+          return { status: 200, data: { token: TOKEN_AUDITOR, user: session } satisfies LoginResult, token: TOKEN_AUDITOR }
         }
         return { status: 401, data: { message: '账号或密码错误' } }
       }
@@ -245,7 +270,7 @@ export function createRuntimeApi(engine: PageEngine, store: RuntimeStore): Runti
         || path.startsWith('/monitor/online/')
       if (!known) return RUNTIME_UNHANDLED
 
-      const user = authenticate(token)
+      const user = asSession(authenticate(token))
       if (!user) return { status: 401, data: { message: '登录已失效，请重新登录' } }
 
       if (path === '/auth/profile' && method === 'GET') return { status: 200, data: user }

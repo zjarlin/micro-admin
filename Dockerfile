@@ -11,11 +11,17 @@ ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN npm i -g pnpm@11.7.0
 # 依赖层单独缓存：只要锁文件不变就不重复解析。
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# permission-meta 以 file: 依赖 vendor 下的 tgz（源码唯一来源在 studio/packages/permission-meta）。
+COPY vendor vendor/
 COPY packages/data-page/package.json packages/data-page/
 COPY packages/data-page-element/package.json packages/data-page-element/
 COPY packages/ui-canvas/package.json packages/ui-canvas/
 COPY packages/ui-server/package.json packages/ui-server/
 COPY packages/ifc-canvas/package.json packages/ifc-canvas/
+COPY packages/scada-dsl/package.json packages/scada-dsl/
+COPY packages/cad-import/package.json packages/cad-import/
+COPY packages/nav-tree/package.json packages/nav-tree/
+COPY packages/source-locator/package.json packages/source-locator/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build:packages && pnpm build
@@ -25,6 +31,7 @@ WORKDIR /app
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NODE_ENV=production
 RUN npm i -g pnpm@11.7.0
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=build /app/vendor vendor
 COPY --from=build /app/packages packages
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 # 前端产物 + 后端源码（Node 22 原生执行 TS，无需再构建）。

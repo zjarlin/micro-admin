@@ -18,6 +18,10 @@ export const pluginProfiles = {
     'ui-canvas',
     'shell',
     'pages',
+    'ai',
+    'theme',
+    'page-agent',
+    'source-finder',
   ],
   desktop: ['core-admin', 'user', 'dict'],
 } as const satisfies Record<string, readonly string[]>

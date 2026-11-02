@@ -3,6 +3,7 @@ export { hasPermission, filterByPermission } from './permission'
 export type {
   CommandRegistry,
   EventBus,
+  HttpRegistry,
   KernelOptions,
   MenuContribution,
   PluginContext,
@@ -10,6 +11,14 @@ export type {
   PluginStatus,
   RouteContribution,
   ServiceRegistry,
+  SettingAction,
+  SettingBlock,
+  SettingField,
+  SettingFieldType,
+  SettingGroup,
+  SettingOption,
+  SettingSectionContribution,
+  SettingValues,
   SlotContribution,
   WidgetContribution,
 } from './types'

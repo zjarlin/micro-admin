@@ -1,0 +1,28 @@
+{
+  "name": "@zjarlin/scada-dsl",
+  "version": "0.1.0",
+  "description": "组态画布的 AI 指令集：绘图指令 + 排版指令的语法、解析、执行与提示词目录（无 UI 依赖）",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["src", "dist", "README.md"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./grammar": "./src/grammar.ts",
+    "./parse": "./src/parse.ts",
+    "./apply": "./src/apply.ts",
+    "./describe": "./src/describe.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "./grammar": { "types": "./dist/grammar.d.ts", "default": "./dist/grammar.js" },
+      "./parse": { "types": "./dist/parse.d.ts", "default": "./dist/parse.js" },
+      "./apply": { "types": "./dist/apply.d.ts", "default": "./dist/apply.js" },
+      "./describe": { "types": "./dist/describe.d.ts", "default": "./dist/describe.js" }
+    }
+  }
+}

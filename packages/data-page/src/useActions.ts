@@ -20,6 +20,8 @@ export interface ActionContext {
   openCreate(seed?: Row): void
   openEdit(row: Row): void
   openDetail?(row: Row): void
+  /** `kind: 'custom'` 用：动作本身不做事，由宿主页面决定打开什么。 */
+  custom?(action: ActionSchema, row: Row): void
   reload(): void | Promise<void>
   can(permission?: string): boolean
   notifier: Notifier
@@ -109,6 +111,10 @@ export function resolveActions(
             return
           case 'detail':
             ctx.openDetail?.(row)
+            return
+          case 'custom':
+            // 交互由宿主负责（例如角色行的「授权菜单」弹层）；这里只转发一次。
+            ctx.custom?.(action, row)
             return
           case 'delete': {
             if (!(await confirmIfNeeded(row))) return

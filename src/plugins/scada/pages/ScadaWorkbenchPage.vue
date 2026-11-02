@@ -3,12 +3,16 @@
 //
 // 数据全部走后端契约（/scada/*，实现在 `server/plugins/scada/`）；
 // 画布求值与几何在 src/shared/scada/render.ts，页面只做交互编排。
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bottom, Delete, DocumentAdd, Download, Operation, Refresh, RefreshRight, Sort, Top } from '@element-plus/icons-vue'
+import { Bottom, Delete, DocumentAdd, Download, MagicStick, Operation, Refresh, RefreshRight, Sort, Top, Upload } from '@element-plus/icons-vue'
 import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
+import { getKernel } from '@/router'
+import { useKernelStore } from '@/stores/kernel'
+import { useSessionStore } from '@/stores/session'
+import { filterByPermission, type SlotContribution } from '@/kernel'
 import type {
   ScadaDocument,
   ScadaRect,
@@ -21,10 +25,13 @@ import type {
 import { createEmptyScadaDocument, parseScadaDocument } from '@/shared/scada/types'
 import type { TagValueSource } from '@/shared/scada/render'
 import { referencedTagIds } from '@/shared/scada/render'
+import { attachScadaWorkbench } from '@/plugins/scada/workbench'
 import ScadaCanvas from '@/components/scada/ScadaCanvas.vue'
 import ScadaInspector from '@/components/scada/ScadaInspector.vue'
 import ScadaSymbolPalette from '@/components/scada/ScadaSymbolPalette.vue'
+import ScadaShapeStrip from '@/components/scada/ScadaShapeStrip.vue'
 import ScadaTagPicker from '@/components/scada/ScadaTagPicker.vue'
+import ScadaCadImportDialog from '@/components/scada/ScadaCadImportDialog.vue'
 /**
  * 深拷贝：Vue 的响应式对象是 Proxy，`structuredClone` 会抛 DataCloneError；
  * 画布文档本身只含 JSON 可表达的字段，用 JSON 往返最稳。
@@ -53,6 +60,8 @@ const dirty = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const tagPickerVisible = ref(false)
+/** CAD 图纸导入对话框：图纸解析与指令生成都在服务端，页面只负责打开与写回。 */
+const cadImportVisible = ref(false)
 const tagPickerSlot = ref<string | null>(null)
 const loadError = ref<string | null>(null)
 const canvasHost = ref<HTMLElement | null>(null)
@@ -66,6 +75,14 @@ const symbolMap = computed(() => {
   for (const symbol of symbols.value) map[symbol.key] = symbol
   return map
 })
+
+/**
+ * 基础图形：工具条上那一排小图标。
+ *
+ * 取自图元库自身（`category === 'basic'`），不在页面里再写一份 key 清单——
+ * 加一个基础图元，工具条自动多一格。
+ */
+const basicSymbols = computed(() => symbols.value.filter((symbol) => symbol.category === 'basic'))
 
 const tagById = computed(() => {
   const map = new Map<number, ScadaTagOption>()
@@ -210,19 +227,76 @@ const inspectorHint = computed(() => {
   return '在画布上选中图元后编辑属性'
 })
 
-/** 属性栏开关：默认**关闭**——一进页面就占掉 300+px 与「画布吃满」冲突。 */
-const inspectorOpen = ref(false)
+/**
+ * 右栏是「属性 / AI」共用的同一块位置：同一时刻只开一个，关掉即一像素不留。
+ *
+ * 为什么不做成外壳右栏（mka 的 app-frame）：本仓库的外壳由图纸下发（`ShellFrame.vue`），
+ * 没有可 Teleport 的固定右栏宿主；组态右栏又只有本页用，做成页内 aside 反而更简单。
+ */
+const sidePanel = ref<'none' | 'inspector' | 'ai'>('none')
+const inspectorOpen = computed(() => sidePanel.value === 'inspector')
 
-/** 工具条上的「属性」：开属性栏；已开时再点即收起（跟 CAD 一样，一像素都不白占）。 */
 function openInspector(): void {
-  inspectorOpen.value = !inspectorOpen.value
+  sidePanel.value = sidePanel.value === 'inspector' ? 'none' : 'inspector'
 }
+
+/** AI 助手页签内容：来自 `ai` 插件贡献的 `scada:assistant` 槽位；插件没启用就整块消失。 */
+const kernelStore = useKernelStore()
+const session = useSessionStore()
+const assistantSlots = computed<SlotContribution[]>(() => {
+  const kernel = getKernel()
+  if (!kernel) return []
+  void kernelStore.statuses
+  const enabled = new Set(kernelStore.statuses.filter((item) => item.enabled).map((item) => item.id))
+  return filterByPermission(
+    kernel.slotContributions('scada:assistant').filter((slot) => !slot.pluginId || enabled.has(slot.pluginId)),
+    session.permissions,
+  )
+})
+
+function openAssistant(): void {
+  if (!assistantSlots.value.length) {
+    ElMessage.info('AI 助手未启用：检查「AI 助手」插件是否启用')
+    return
+  }
+  sidePanel.value = sidePanel.value === 'ai' ? 'none' : 'ai'
+}
+
+const detachWorkbench = ref<null | (() => void)>(null)
 
 onMounted(async () => {
   await refreshAll()
   // 从「画面库」点「编辑」进来时带 screenId：直接打开那一页，不覆盖本地已选。
   const queryId = Number(route.query.screenId ?? 0)
   if (queryId && queryId !== currentScreen.value?.id) await openScreen(queryId)
+  // 把画布的读写能力挂到公开句柄上：AI 插件（以及将来任何插件）只通过它协作。
+  detachWorkbench.value = attachScadaWorkbench({
+    readDocument: () => deepClone(document.value),
+    readSymbols: () => symbols.value,
+    readTags: () => tagOptions.value,
+    readSelection: () => [...selectedIds.value],
+    writeDocument: (next) => {
+      document.value = next
+      selectedIds.value = []
+      dirty.value = true
+    },
+    readScreenId: () => currentScreen.value?.id ?? null,
+    /** AI 在服务端改完画面后，页面上这份视图要重新拉一次才能看到结果。 */
+    reload: async () => {
+      const id = currentScreen.value?.id
+      if (!id) return
+      const detail = await http.request<ScadaScreenDetail>(`/scada/screen?screenId=${id}`)
+      currentScreen.value = detail
+      document.value = parseScadaDocument(detail.documentJson)
+      selectedIds.value = []
+      dirty.value = false
+      fitToView()
+    },
+  })
+})
+
+onBeforeUnmount(() => {
+  detachWorkbench.value?.()
 })
 
 // ---------------- 画面增删改 ----------------
@@ -405,9 +479,19 @@ function findFreeSpot(width: number, height: number, grid: number): { x: number;
   return { x: startX, y: startY }
 }
 
-function addSymbol(symbol: ScadaSymbolDefinition): void {
+/**
+ * 加点：`at` 是画布坐标（工具条拖放时给「落点」，就是 CAD 的放法）；
+ * 不传则按第一个空位放（图标点一下加的默认行为）。
+ */
+function addSymbol(symbol: ScadaSymbolDefinition, at?: { x: number; y: number }): void {
   const grid = document.value.canvas.grid || 10
-  const spot = findFreeSpot(symbol.defaultWidth, symbol.defaultHeight, grid)
+  const spot = at
+    ? {
+        // 落点对准图元中心，和 CAD / Photoshop 里「拖到哪儿就落在哪儿」的手感一致。
+        x: Math.max(0, Math.round((at.x - symbol.defaultWidth / 2) / grid) * grid),
+        y: Math.max(0, Math.round((at.y - symbol.defaultHeight / 2) / grid) * grid),
+      }
+    : findFreeSpot(symbol.defaultWidth, symbol.defaultHeight, grid)
   const widget: ScadaWidget = {
     id: nextWidgetId(),
     symbolKey: symbol.key,
@@ -432,7 +516,21 @@ function onDrop(event: DragEvent): void {
   const symbol = symbolMap.value[key]
   if (!symbol) return
   event.preventDefault()
-  addSymbol(symbol)
+  addSymbol(symbol, dropPoint(event))
+}
+
+/**
+ * 拖放落点 → 画布坐标。
+ *
+ * 画布坐标是文档坐标，视口里的位置要除以缩放；取不到 svg（还没渲染）时返回 undefined，
+ * 交给 `addSymbol` 退回「第一个空位」。
+ */
+function dropPoint(event: DragEvent): { x: number; y: number } | undefined {
+  const svg = canvasHost.value?.querySelector('svg')
+  if (!svg) return undefined
+  const box = svg.getBoundingClientRect()
+  const scale = zoom.value || 1
+  return { x: (event.clientX - box.left) / scale, y: (event.clientY - box.top) / scale }
 }
 
 function deleteSelected(): void {
@@ -507,6 +605,21 @@ function clearBinding(slot: string): void {
   if (!widget) return
   widget.bindings = widget.bindings.filter((binding) => binding.slot !== slot)
   dirty.value = true
+}
+
+// ---------------- CAD 导入 ----------------
+
+/**
+ * 导入结果 → 画布。
+ *
+ * 图纸就是这张画面：直接替换图元列表，保留画面名称与文档版本。
+ * 不自动保存——与工具条其它改动一致，用户点「保存」才算落库。
+ */
+function applyCadDocument(next: ScadaDocument): void {
+  document.value = { ...next, canvas: { ...next.canvas, showGrid: document.value.canvas.showGrid } }
+  selectedIds.value = []
+  dirty.value = true
+  void nextTick(() => fitToView())
 }
 
 // ---------------- 视图 ----------------
@@ -584,6 +697,23 @@ function exportSvg(): void {
 
       <span class="scada-divider" />
 
+      <!-- 导入图纸：丢一个 DXF / DWG 进来，服务端本地解析成绘图指令集（不花 token），
+           确认后才写画面；要不要 AI 补语义由用户在对话框里选。 -->
+      <el-tooltip content="导入 CAD 图纸（DXF / DWG）→ 组态画面" placement="bottom" :show-after="400">
+        <el-button size="small" :icon="Upload" aria-label="导入 CAD 图纸" :disabled="loading" @click="cadImportVisible = true" />
+      </el-tooltip>
+
+      <span class="scada-divider" />
+
+      <!-- 基础图形：CAD / Photoshop 那种「一排很小的图形图标」。
+           图标来自图元定义本身，点一下放到空位、拖到画布上放到指定位置。 -->
+      <el-tooltip content="基础图形：点一下加到画布，或拖到指定位置" placement="bottom" :show-after="400">
+        <span class="scada-bar__hint">图形</span>
+      </el-tooltip>
+      <ScadaShapeStrip :symbols="basicSymbols" :disabled="loading" @add="addSymbol" />
+
+      <span class="scada-divider" />
+
       <!-- 开关用图标按钮而不是带字的复选框：一条工具条只许一行，字是第一个让位的东西。 -->
       <div class="scada-bar__group">
         <el-tooltip :content="`栅格吸附：${snapEnabled ? '开' : '关'}`" placement="bottom">
@@ -645,7 +775,15 @@ function exportSvg(): void {
             属性
           </el-button>
         </el-tooltip>
-        <!-- 这个仓库没有页面助手插件，工具条只留「属性」，不给 AI 开第二条入口。 -->
+        <el-tooltip v-if="assistantSlots.length" content="AI 助手（自然语言改画布）" placement="bottom">
+          <el-button
+            size="small"
+            :type="sidePanel === 'ai' ? 'primary' : 'default'"
+            :plain="sidePanel === 'ai'"
+            :icon="MagicStick"
+            @click="openAssistant"
+          />
+        </el-tooltip>
       </div>
 
       <span class="scada-divider" />
@@ -735,8 +873,8 @@ function exportSvg(): void {
         />
       </div>
 
-      <!-- 属性栏：同一次挂载、同一份状态，`v-show` 收起而不是销毁——收起再打开不会丢选中。
-           默认关闭，点工具条上的「属性」才开——省下的宽度全给画布。 -->
+      <!-- 右栏：属性 / AI 共用一个位置，同一时刻只显示一块。
+           同一次挂载、同一份状态，`v-show` 收起而不是销毁——收起再打开不会丢选中、不丢 AI 输入。 -->
       <aside v-show="inspectorOpen" class="scada-inspector">
         <p class="scada-inspector__hint">{{ inspectorHint }}</p>
         <ScadaInspector
@@ -755,7 +893,20 @@ function exportSvg(): void {
           @toggle-lock="toggleLock"
         />
       </aside>
+
+      <aside v-show="sidePanel === 'ai'" class="scada-inspector scada-assistant">
+        <component :is="slot.component" v-for="slot in assistantSlots" :key="slot.id" />
+      </aside>
     </div>
+
+    <ScadaCadImportDialog
+      v-model="cadImportVisible"
+      :http="http"
+      :document="document"
+      :symbols="symbols"
+      :tags="tagOptions"
+      @apply="applyCadDocument"
+    />
 
     <ScadaTagPicker
       v-model="tagPickerVisible"
@@ -793,6 +944,7 @@ function exportSvg(): void {
 .scada-title strong { font: 600 12px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scada-title em { font-style: normal; font-size: 11px; color: var(--muted); flex: none; }
 .scada-title em.is-dirty { color: #f59e0b; }
+.scada-bar__hint { font-size: 11px; color: var(--muted); white-space: nowrap; flex: none; }
 .scada-zoom { flex: none; }
 .scada-zoom__slider { width: 84px; }
 .scada-zoom__value { min-width: 34px; text-align: right; }
@@ -805,6 +957,9 @@ function exportSvg(): void {
   padding: 12px; border-left: 1px solid var(--line); background: var(--surface);
 }
 .scada-inspector__hint { margin: 0 0 10px; font-size: 11px; color: var(--muted); }
+/* AI 页签与属性页签共用一块右栏：内容自己排布，容器只负责宽度与滚动。 */
+.scada-assistant { display: flex; flex-direction: column; }
+.scada-assistant > * { min-width: 0; }
 .scada-canvas-host { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; }
 
 /* 资源抽屉：浮在画布上，关掉即一像素不留。 */

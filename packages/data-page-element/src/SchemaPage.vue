@@ -28,6 +28,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'detail', row: Row): void
+  /** `kind: 'custom'` 的行动作：一路透传到宿主页面。 */
+  (event: 'action', payload: { key: string; row: Row }): void
   (event: 'vibe', payload: { channel: string; payload: unknown; row: Row }): void
 }>()
 
@@ -82,6 +84,7 @@ onMounted(async () => {
       :dict-label="dictLabel"
       :navigate="navigate"
       @detail="emit('detail', $event)"
+      @action="emit('action', $event)"
       @vibe="emit('vibe', $event)"
     >
       <template v-for="(_, name) in $slots" #[name]="slotProps">
@@ -97,6 +100,7 @@ onMounted(async () => {
       :dict-options="dictOptions"
       :navigate="navigate"
       @detail="emit('detail', $event)"
+      @action="emit('action', $event)"
       @vibe="emit('vibe', $event)"
     >
       <template v-for="(_, name) in $slots" #[name]="slotProps">

@@ -131,7 +131,7 @@ function round(value: number): number {
  * 场景 → 3D 计划。
  *
  * 关键点：`missing` 永远从「规则没覆盖的零件」推导，不因为某条字段为空就整份画面追问，
- * 所以绝大多数内置画面（15 个图元全覆盖）导出的 `aiRequest` 是 `null`。
+ * 所以绝大多数内置画面（18 个图元全覆盖）导出的 `aiRequest` 是 `null`。
  */
 export function buildPlan(scene: SceneLike, options: PlanOptions = {}): ExtrusionPlan {
   const settings: ScenePlanSettings = { ...DEFAULT_SETTINGS, ...(options.settings ?? {}) }

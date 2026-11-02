@@ -7,7 +7,7 @@
 图纸（UiDrawing，纯 JSON）
       │  compileDrawing
       ▼
-CrudPageSchema  ←── 与手写 schema（src/plugins/user/data.ts）完全同构
+CrudPageSchema  ←── 与手写 schema（src/schema/user.ts）完全同构
       │  PUT /ui/pages/{key}
       ▼
 createStoredRegistry → GET /ui/pages → pagesPlugin 自动挂路由+菜单
@@ -116,8 +116,9 @@ POST /ui-canvas/drawing/publish  { id }                 编译→有 error 直�
 POST /ui-canvas/drawing/unpublish{ id }
 POST /ui-canvas/drawing/ask      { id, answers }        AI 补参回填（白名单+类型收敛）
 POST /ui-canvas/drawings/wireframe                      批量 SVG 缩略图
-GET  /ui-canvas/drawing/wireframe?id=                   单张 SVG
+GET  /ui-canvas/drawing/wireframe?id=                   单张 SVG（RawResponse，不套 JSON 信封）
 ```
 
-AI 补参复用 `server/lib/sub2api.ts`（全站唯一一份 Responses 封装，组态侧也委托它），
-未配置 `SUB2API_API_KEY` 时接口返回 400 而不是假装成功。
+AI 补参复用本仓库已有的 `server/plugins/ai`（配置 + Responses 客户端）：
+和组态指令走同一个 sub2api、同一份密钥、同一套超时，只允许用 `UIC_MODEL` 单独选一个
+便宜模型给图纸补参，避免占掉贵的额度。没配好时接口返回 400 而不是假装成功。

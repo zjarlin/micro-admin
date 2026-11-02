@@ -353,6 +353,19 @@ export function createEmptyShellDrawing(key = 'shell.default', title = '默认�
       shellElement('menu-search', 'menu-search', { x: 12, y: 78, width: 224, height: 32 }, { zIndex: 3 }),
       shellElement('collapse', 'collapse', { x: 12, y: 850, width: 224, height: 38 }, { zIndex: 2 }),
       shellElement('breadcrumb', 'breadcrumb', { x: 288, y: 26, width: 300, height: 24 }, { zIndex: 2 }),
+      // 全站插件入口也是顶栏图标：图纸上是一个 `icon` 元素，点击执行插件注册的命令。
+      // 命令不存在（插件被停用/未入档）时外壳不渲染这个图标，所以插件停用即入口消失，
+      // 不需要外壳为它们再留一套槽位机制。
+      shellElement('icon-page-agent', 'icon', { x: 1096, y: 21, width: 34, height: 34 }, {
+        zIndex: 2, text: '页面助手',
+        props: { icon: 'MagicStick', tooltip: '页面助手：自然语言操作当前页面', showLabel: false },
+        bindings: [{ kind: 'event', channel: 'click', action: 'command', params: { name: 'page-agent.toggle' } }],
+      }),
+      shellElement('icon-source-finder', 'icon', { x: 1138, y: 21, width: 34, height: 34 }, {
+        zIndex: 2, text: '元素定位',
+        props: { icon: 'Aim', tooltip: '元素定位：点元素跳源码（⌘/Ctrl+⇧+E）', showLabel: false },
+        bindings: [{ kind: 'event', channel: 'click', action: 'command', params: { name: 'source-finder.pick' } }],
+      }),
       shellElement('icon-theme', 'icon', { x: 1180, y: 21, width: 34, height: 34 }, {
         zIndex: 2, text: '切换主题',
         props: { icon: 'Moon', tooltip: '切换深浅色', showLabel: false },

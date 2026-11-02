@@ -16,6 +16,7 @@ import type {
   MenuContribution,
   SlotContribution,
   WidgetContribution,
+  SettingSectionContribution,
 } from './types'
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/
@@ -35,6 +36,7 @@ export class MicroKernel {
   private readonly menus = createContributionRegistry<MenuContribution>('menu')
   private readonly slots = createContributionRegistry<SlotContribution>('slot')
   private readonly widgets = createContributionRegistry<WidgetContribution>('widget')
+  private readonly settings = createContributionRegistry<SettingSectionContribution>('setting')
   private readonly events = createEventBus()
   private readonly commands: CommandRegistry = this.createCommands()
 
@@ -65,6 +67,13 @@ export class MicroKernel {
 
   widgetContributions(): WidgetContribution[] {
     return this.widgets.all().sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+  }
+
+  /** 设置贡献按分组顺序 + 区内顺序返回；渲染时再按权限与插件状态过滤。 */
+  settingContributions(): SettingSectionContribution[] {
+    return this.settings.all().sort(
+      (a, b) => (a.group.order ?? 100) - (b.group.order ?? 100) || (a.order ?? 100) - (b.order ?? 100),
+    )
   }
 
   slotContributions(name: string): SlotContribution[] {
@@ -296,6 +305,11 @@ export class MicroKernel {
         add: (widget) => track(this.widgets.add({ ...widget, pluginId: id })),
         remove: (widget) => this.widgets.remove(widget),
         all: () => this.widgets.all(),
+      },
+      settings: {
+        add: (section) => track(this.settings.add({ ...section, pluginId: id })),
+        remove: (section) => this.settings.remove(section),
+        all: () => this.settings.all(),
       },
       configs: {
         get: (key) => this.services.get(`config:${key}`),

@@ -18,6 +18,24 @@
     },
     {
       "path": "./packages/ui-server"
+    },
+    {
+      "path": "./packages/scada-dsl"
+    },
+    {
+      "path": "./packages/ifc-canvas"
+    },
+    {
+      "path": "./packages/cad-import"
+    },
+    {
+      "path": "./packages/nav-tree"
+    },
+    {
+      "path": "./packages/source-locator"
+    },
+    {
+      "path": "./packages/ui-canvas"
     }
   ]
 }

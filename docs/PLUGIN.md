@@ -108,16 +108,61 @@ setup 抛错 → rollback 已注册贡献 → failed（错误写入插件状态�
 | `ctx.events` | 发布/订阅事件 | 字符串事件名 |
 | `ctx.slots` | 向宿主页面注入组件 | `name`、`id`、`component`、`order` |
 | `ctx.widgets` | 注册仪表盘小组件 | `id`、`title`、`component`、`span` |
+| `ctx.settings` | 把设置交给系统设置页 | `id`、`group`、`title`、`fields`/`component`、`load`、`save` |
 | `ctx.configs` | 注册只读配置 | 字符串 key |
 | `ctx.http` | 通过宿主 HTTP 客户端请求 | 与业务后端一致 |
 
 当前内置槽位：
 
+- `canvas:tab`：画布页签（`scada` / `ui-canvas` 贡献各自的画布页面，宿主只做页签与舞台）。
+- `scada:assistant`：组态画布页的助手面板（`ai` 插件贡献画布指令生成）。
+
+> 外壳顶栏/侧栏**不再用槽位**：它们由后端下发的 `ShellSchema` 渲染，图标是一等元素。
+> 插件的顶栏入口改成一个图纸元素 + 一个内核命令（例如页面助手注册 `page-agent.toggle`，
+> 图纸上的 AI 图标点击执行它）。命令随插件启停消失，外壳不需要为任何插件预留槽位。
 - `dashboard:after-metrics`：工作台指标卡之后，`monitor` 插件用它注入服务健康卡片。
 
 `widgets` 已在内核中提供贡献注册与查询，宿主暂未内置仪表盘网格，可作为后续插件化看板的扩展点。
 
-## 4. 权限约定
+## 4. 设置贡献
+
+插件不再各自建「XX 设置」页，而是把设置区交给系统设置页（`settings` 插件）。
+一次声明同时得到：分组标签页、控件渲染、必填星号与校验、脏检查、保存/恢复默认、按权限收窄。
+
+```ts
+ctx.settings.add({
+  id: 'report:settings',
+  // 一个分组 = 系统设置页的一个标签页；同分组的插件贡献自动并到同一个 tab。
+  group: { id: 'report', title: '报表', order: 30, icon: 'DataLine' },
+  title: '报表导出',
+  permission: 'report:settings:config',
+  blocks: [{ id: 'mail', title: '邮件投递', description: '每日 8 点发送' }],
+  fields: [
+    { key: 'enabled', block: 'mail', label: '启用', type: 'switch' },
+    { key: 'to', block: 'mail', label: '收件人', type: 'tags', required: true },
+    { key: 'cron.hour', block: 'mail', label: '发送小时', type: 'number', min: 0, max: 23 },
+  ],
+  async load() {
+    return ctx.http.request('/report/settings')
+  },
+  async save(values) {
+    await ctx.http.request('/report/settings', { method: 'PUT', body: JSON.stringify(values) })
+  },
+  defaults: () => ({ enabled: false, to: [], cron: { hour: 8 } }),
+})
+```
+
+- 字段类型：`text / textarea / number / switch / select / color / secret / tags / records / json`。
+  `key` 支持 `panel.width` 点路径；`records` 用 `columns` 复用同一套字段声明。
+- 必填星号与提交校验来自同一个 `required`（可以是函数，例如「没存过密钥才必填」），
+  不允许只在提交后弹错误文案。`pattern`、`min`/`max`、`visible`、`disabled` 同理。
+- 需要实时预览或自定义交互时给 `component`（自带加载与保存），例如外观主题；
+  声明式字段负责绝大多数表单，不要求每个插件都写 Vue。
+- 同一个设置项只保留一个入口：并进系统设置后删掉原菜单，旧路由用 `redirect` 保活。
+- 权限分两层：页面入口是 `system:settings:view`，每个设置区再按自己的权限码收窄；
+  后端写入权限仍由各插件接口自己校验。
+
+## 5. 权限约定
 
 权限字符串沿用若依风格：
 
@@ -134,7 +179,7 @@ monitor:server:view
 - 页面内按钮应继续调用 `session.can('system:user:add')` 或使用 `v-if` 包装，不要只依赖菜单隐藏。
 - `*:*:*` 表示超级管理员，拥有全部权限。
 
-## 5. 数据访问
+## 6. 数据访问
 
 业务插件不直接读 `import.meta.env`，也不直接创建 `fetch`。统一使用 `ctx.http`：
 
@@ -151,7 +196,7 @@ const rows = await ctx.http.request<DailyReport[]>('/report/daily')
 - 响应格式固定为 `{ code: 0, message: string, data: T }`。
 - 非 2xx 或 `code !== 0` 统一抛 `ApiError`，页面可直接展示 `error.message`。
 
-## 6. 测试建议
+## 7. 测试建议
 
 - 内核层：依赖排序、循环/缺失依赖、重复贡献、级联停用、teardown、失败回滚。
 - 插件层：`setup()` 是否注册预期路由/菜单/命令，`teardown` 是否释放外部资源。

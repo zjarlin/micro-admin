@@ -22,20 +22,26 @@ import {
   type PageRegistry,
   type PageStore,
   type RuntimeStore,
+  type SessionResolver,
+  type SessionUser,
 } from '@zjarlin/data-page'
 
-/** 与前端响应信封对齐：HTTP 状态之外再给业务码。 */
-export interface Envelope<T> {
-  code: number
-  message: string
-  data: T
+/**
+ * 静态资源缓存策略。
+ *
+ * `dist/assets/*` 的文件名带内容哈希，可以永久缓存；其余（头像、favicon、SPA 兜底）
+ * 用 `no-cache` + 强校验，保证发布后第一次刷新就能拿到新版本。
+ */
+function cacheOf(path: string, c: { header: (name: string, value: string) => void }): void {
+  const hashed = path.includes('/assets/')
+  c.header('Cache-Control', hashed ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate')
 }
 
 /**
  * 原样返回的响应体：文件下载与图片类接口不能套 JSON 信封。
  *
  * 扩展返回 `RawResponse` 时，HTTP 外壳直接用它的字节与头部回包，
- * 因此 `.ifc`、`.svg` 这类产物不需要再额外开一个静态目录。
+ * 因此 `.svg`、`.ifc` 这类产物不需要再额外开一个静态目录。
  */
 export class RawResponse {
   // 不用参数属性：`node --experimental-strip-types` 只支持纯类型擦除。
@@ -54,8 +60,19 @@ export class RawResponse {
   }
 }
 
-/** 宿主扩展：返回 `null` 表示不处理，交给下一个扩展/页面引擎继续匹配。 */
-/** 当前登录用户的扩展视图：只暴露权限判定需要的字段。 */
+/** 与前端响应信封对齐：HTTP 状态之外再给业务码。 */
+export interface Envelope<T> {
+  code: number
+  message: string
+  data: T
+}
+
+/**
+ * 宿主扩展：返回 `null` 表示不处理，交给页面引擎继续匹配。
+ *
+ * 允许返回 Promise：模型调用这类下游 I/O 是异步的，扩展层不该为了同步签名
+ * 去阻塞事件循环；内核统一 await，错误照旧走错误信封。
+ */
 export interface ExtensionUser {
   username?: string
   permissions: string[]
@@ -79,7 +96,7 @@ export interface ApiExtension {
    * 也允许返回 Symbol 表示不处理（各业务域自带 `UNHANDLED` 哨兵），外壳同样跳过：
    * 否则第一个扩展的哨兵会被当成返回值，后面的扩展永远拿不到请求。
    */
-  handle(request: ExtensionRequest): unknown | null
+  handle(request: ExtensionRequest): unknown | Promise<unknown> | null
 }
 
 export interface AppDeps {
@@ -96,7 +113,14 @@ export interface AppDeps {
   /** 页面配置写权限码，缺省 `system:page:config`。 */
   schemaWritePermission?: string | undefined
   /**
-   * 免登录读取的扩展路径（例如外壳配置要在登录页之前生效）。
+   * 会话解析：把静态令牌用户换成按角色授权计算的权限。
+   *
+   * 通用层不认识宿主的角色/菜单表，所以「谁能看到什么」这条策略由宿主注入；
+   * 返回 `null` 表示不接管。每次请求都会调用，改完授权不必重启。
+   */
+  resolveUser?: SessionResolver | undefined
+  /**
+   * 免登录读取的扩展路径（例如外壳配置/外观要在登录页之前生效）。
    * 只放前言/外壳这类不含业务数据的 GET 接口，其余仍走令牌。
    */
   publicPaths?: string[] | undefined
@@ -132,13 +156,28 @@ function failure(error: unknown): { status: number; message: string } {
   return { status, message }
 }
 
+/**
+ * 扩展的「没处理」既有 `null`，也有各模块自己的 `UNHANDLED` 哨兵（Symbol）。
+ * 两者都表示继续往后找，不能当成已处理，否则会把 Symbol 序列化成空响应。
+ */
+function unhandled(result: unknown): boolean {
+  return result === null || result === undefined || typeof result === 'symbol'
+}
+
 export function createApp(deps: AppDeps): CreatedApp {
   const engine = createPageEngine({
     registry: deps.registry,
     store: deps.pages,
     ...(deps.seed ? { seed: deps.seed } : {}),
   })
-  const runtime = createRuntimeApi(engine, deps.runtime)
+  const runtime = createRuntimeApi(
+    engine,
+    deps.runtime,
+    deps.resolveUser ? { resolveUser: deps.resolveUser } : {},
+  )
+  /** 鉴权与扩展共用同一份解析结果，避免「路由放行、扩展里另算一套」。 */
+  const asSession = (user: SessionUser | null): SessionUser | null =>
+    user && deps.resolveUser ? (deps.resolveUser(user) ?? user) : user
   const extensions = deps.extensions ?? []
   const app = new Hono()
   const writePermission = deps.schemaWritePermission ?? SCHEMA_WRITE_PERMISSION
@@ -173,7 +212,7 @@ export function createApp(deps: AppDeps): CreatedApp {
     // 页面清单公开只读：宿主要在建路由之前知道有哪些页面。
     // 业务数据接口仍然逐个校验令牌。
     const isPublic = isPublicPath(path, method) || (method === 'GET' && (deps.publicPaths ?? []).includes(path))
-    const user = isPublic ? null : authenticate(token)
+    const user = isPublic ? null : asSession(authenticate(token))
     if (!isPublic && !user) {
       return c.json(envelope(null, 401, '登录已失效，请重新登录'), 401)
     }
@@ -208,25 +247,21 @@ export function createApp(deps: AppDeps): CreatedApp {
           method,
           path,
           query: url.searchParams,
+          // 非 GET 请求体由外壳收敛成对象；扩展只拿到结构化输入。
           body: (body && typeof body === 'object' ? body : {}) as Record<string, unknown>,
           user: user ? { username: user.username, permissions: user.permissions } : null,
         })
-        // `null` 与 Symbol 哨兵都表示「这个扩展不处理」，交给下一个。
-        if (result === null || typeof result === 'symbol') continue
         if (result instanceof RawResponse) {
           const headers = new Headers({ 'Content-Type': result.contentType })
           const filename = result.options.filename
           if (filename) {
             const encoded = encodeURIComponent(filename)
             const disposition = result.options.inline ? 'inline' : 'attachment'
-            headers.set(
-              'Content-Disposition',
-              `${disposition}; filename="${encoded}"; filename*=UTF-8''${encoded}`,
-            )
+            headers.set('Content-Disposition', `${disposition}; filename="${encoded}"; filename*=UTF-8''${encoded}`)
           }
           return new Response(result.body, { status: result.options.status ?? 200, headers })
         }
-        return c.json(envelope(result))
+        if (!unhandled(result)) return c.json(envelope(result))
       }
     } catch (error) {
       const { status, message } = failure(error)
@@ -239,8 +274,14 @@ export function createApp(deps: AppDeps): CreatedApp {
 
   // 前端构建产物：存在 dist 时才挂静态资源与 SPA 兜底。
   if (deps.staticDir && existsSync(deps.staticDir)) {
-    app.use('/*', serveStatic({ root: deps.staticDir }))
-    app.get('*', serveStatic({ root: deps.staticDir, path: 'index.html' }))
+    app.use('/*', serveStatic({ root: deps.staticDir, onFound: cacheOf }))
+    app.get('*', serveStatic({
+      root: deps.staticDir,
+      path: 'index.html',
+      // 入口 HTML 绝不能被缓存：它引用的是内容哈希文件名，一旦客户端留着旧 HTML，
+      // 就会一直加载旧构建（改完布局却仍看到旧界面，正是这种表现）。
+      onFound: (_path, c) => c.header('Cache-Control', 'no-cache, must-revalidate'),
+    }))
   }
 
   return { app, engine }
