@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Bell, Close, Fold, FullScreen, Grid, Moon, Setting, Sunny, SwitchButton } from '@element-plus/icons-vue'
+import { Bell, Close, Fold, FullScreen, Moon, Setting, Sunny, SwitchButton } from '@element-plus/icons-vue'
 import { getKernel } from '@/router'
 import { useSessionStore } from '@/stores/session'
 import { useKernelStore } from '@/stores/kernel'
@@ -37,7 +37,6 @@ const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.m
  * 不要外壳的 28px 边距与滚动条——滚动交给页面自己，否则画布永远少一截。
  */
 const fullBleed = computed(() => route.meta.fullBleed === true)
-const enabledPlugins = computed(() => kernelStore.statuses.filter((item) => item.enabled).length)
 
 onMounted(() => {
   const kernel = getKernel()
@@ -109,10 +108,6 @@ function toggleTheme(): void {
         </div>
 
         <div class="topbar-right">
-          <router-link to="/plugins" class="plugin-pill" title="插件中心">
-            <el-icon><Grid /></el-icon>
-            <span>{{ enabledPlugins }} 个插件运行中</span>
-          </router-link>
           <!-- 顶栏动作槽位：全站级入口放这里（例如页面助手的 AI 图标）。
                外壳只声明位置，具体按钮由插件贡献；停用插件即整块消失。 -->
           <SlotHost name="shell:topbar-actions" />
@@ -217,8 +212,6 @@ function toggleTheme(): void {
 .breadcrumb { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .breadcrumb i { font-style: normal; color: var(--line-strong); }
 .breadcrumb strong { color: var(--app-text); font-weight: 600; }
-.plugin-pill { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; text-decoration: none; white-space: nowrap; }
-.plugin-pill:hover { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
 .user-chip { display: flex; align-items: center; gap: 9px; background: transparent; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 9px; }
 .user-chip:hover { background: var(--hover); }
 .avatar { width: 34px; height: 34px; border-radius: 50%; background: #0f172a; color: white; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
@@ -247,9 +240,7 @@ function toggleTheme(): void {
 .page-fade-enter-active, .page-fade-leave-active { transition: opacity .16s ease, transform .16s ease; }
 .page-fade-enter-from { opacity: 0; transform: translateY(5px); }
 .page-fade-leave-to { opacity: 0; }
-/* 容器查询：右栏占轨道时中栏变窄，先收搜索框与插件计数，再收用户部门，最后只留面包屑。 */
-@container shell (max-width: 1040px) { .plugin-pill span { display: none; } }
+/* 容器查询：右栏占轨道时中栏变窄，先收用户部门，最后只留面包屑。 */
 @container shell (max-width: 860px) { .user-meta { display: none; } .breadcrumb span, .breadcrumb i { display: none; } }
-@container shell (max-width: 640px) { .plugin-pill { display: none; } }
 @media (max-width: 760px) { .topbar { padding: 0 16px; } .content-area { padding: 16px; } }
 </style>
