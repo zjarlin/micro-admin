@@ -1,0 +1,36 @@
+# micro-admin 单容器部署：同一镜像同时托管前端产物与 /api（同源，无 CORS）。
+#
+# 数据目录按约定 bind 到 /root/DockerCompose/micro-admin/data，
+# 默认值只在 deploy/.env（0600）里出现一次，此处全部用 ${VAR:?} 强制注入。
+#
+# 本编排只包含本应用自身镜像，不内联任何中间件（postgres/redis/minio/...）。
+# 项目名必须与容器名成对出现：同一台机器上做隔离验证时改成 micro-admin-verify，
+# 否则 compose 会把现役 micro-admin 当作「同一 project/service」而重建它。
+name: ${MICRO_ADMIN_PROJECT:-micro-admin}
+
+services:
+  micro-admin:
+    image: ${MICRO_ADMIN_IMAGE:?MICRO_ADMIN_IMAGE is required}
+    container_name: ${MICRO_ADMIN_CONTAINER:-micro-admin}
+    restart: unless-stopped
+    # 宿主网络：只监听回环（由 localmesh Caddy 反代），并且能直接访问 127.0.0.1 上的
+    # sub2api 网关，不需要给中间件/网关暴露额外地址，也不依赖 host-gateway 解析。
+    network_mode: host
+    environment:
+      SERVER_HOST: 127.0.0.1
+      SERVER_PORT: ${MICRO_ADMIN_HOST_PORT:?MICRO_ADMIN_HOST_PORT is required}
+      DB_FILE: /app/.data/ui.db
+      STATIC_DIR: /app/dist
+      SCHEMA_WRITE_PERMISSION: ${SCHEMA_WRITE_PERMISSION:-system:page:config}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # AI 网关：宿主网络下直连 sub2api 的回环端口（不写死内网 IP）。
+      AI_BASE_URL: ${AI_BASE_URL:-http://127.0.0.1:18080}
+      AI_MODEL: ${AI_MODEL:-ds}
+      AI_API_KEY: ${AI_API_KEY:-}
+      # 组态→IFC 缺参追问：不填则复用上面的 AI_*（同一网关、同一份密钥）。
+      EXTRUSION_MODEL: ${EXTRUSION_MODEL:-}
+      EXTRUSION_AI_BACKGROUND: ${EXTRUSION_AI_BACKGROUND:-1}
+      EXTRUSION_AI_TIMEOUT_MS: ${EXTRUSION_AI_TIMEOUT_MS:-90000}
+      EXTRUSION_AI_POLL_MS: ${EXTRUSION_AI_POLL_MS:-900}
+    volumes:
+      - ${MICRO_ADMIN_DATA_DIR:?MICRO_ADMIN_DATA_DIR is required}:/app/.data

@@ -10,6 +10,7 @@ import { createPageRegistry } from '../src/schema/registry.ts'
 import type { SchemaStateStore } from '@zjarlin/data-page'
 import { createScadaPlugin } from './plugins/scada/index.ts'
 import { createUiCanvasPlugin } from './plugins/ui-canvas/index.ts'
+import { createShellPlugin } from './plugins/shell/index.ts'
 
 export interface HostDeps {
   pages: PageStore
@@ -32,13 +33,17 @@ export function createApp(deps: HostDeps): HostApp {
   // 图纸插件必须拿到「已装配的注册表」：发布就是把编译结果 upsert 进去。
   const registry = createPageRegistry(deps.schemas, deps.profile)
   const uiCanvas = createUiCanvasPlugin({ kv: deps.kv, registry })
+  // 外壳图纸：发布即写入 kv，前端拉 /shell/config 即按新外壳渲染（不需要发版）。
+  const shell = createShellPlugin({ kv: deps.kv })
 
   const created = createUiApp({
     pages: deps.pages,
     runtime: deps.runtime,
     registry,
     seed: () => seedPages(deps.profile),
-    extensions: [scada, uiCanvas],
+    // 运行期外壳要在登录前就能读到（登录页也属于外壳），因此公开读。
+    publicPaths: ['/shell/config'],
+    extensions: [scada, uiCanvas, shell],
     ...(deps.corsOrigins ? { corsOrigins: deps.corsOrigins } : {}),
     ...(deps.staticDir ? { staticDir: deps.staticDir } : {}),
   })

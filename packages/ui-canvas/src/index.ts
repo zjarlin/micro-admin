@@ -50,7 +50,7 @@ export {
 export { compileDrawing } from './compile.ts'
 
 export type { OverlayRegion, WireframeOptions } from './render.ts'
-export { overlayRegions, renderWireframe } from './render.ts'
+export { overlayRegions, renderShellWireframe, renderWireframe } from './render.ts'
 
 export type {
   VibeAction,
@@ -70,6 +70,38 @@ export {
   validateDrawingVibe,
   vibeSchemaOf,
 } from './vibe.ts'
+
+// 外壳图纸（Shell Drawing → ShellSchema）：与页面图纸同源的「画外壳」能力。
+export type {
+  ShellAction,
+  ShellActionKind,
+  ShellAnalysis,
+  ShellBinding,
+  ShellCompiled,
+  ShellDrawing,
+  ShellDrawingMeta,
+  ShellElement,
+  ShellElementProps,
+  ShellItem,
+  ShellRole,
+  ShellRoleSpec,
+  ShellSchema,
+} from './shell.ts'
+export {
+  SHELL_CHANNELS,
+  SHELL_ROLE_LIST,
+  SHELL_ROLE_SPECS,
+  compileShellDrawing,
+  createEmptyShellDrawing,
+  defaultShellCodeOf,
+  parseShellDrawing,
+  shellCanConfigure,
+  shellEffectiveProps,
+  shellElement,
+  shellItemOf,
+  shellSpecOf,
+  shellVibeOf,
+} from './shell.ts'
 
 /** 空白图纸：新建时的唯一初始值。 */
 export function createEmptyDrawing(key = 'system.demo', title = '未命名页面'): import('./types.ts').UiDrawing {

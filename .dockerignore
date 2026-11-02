@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+dist
+packages/*/dist
+.run
+.data
+.git
+deploy
+.github
+.env
+.env.*
+.env.local
+docs
+tests
+*.log
+*.tsbuildinfo
+coverage

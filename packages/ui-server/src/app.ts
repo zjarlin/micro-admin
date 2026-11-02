@@ -55,6 +55,22 @@ export class RawResponse {
 }
 
 /** 宿主扩展：返回 `null` 表示不处理，交给下一个扩展/页面引擎继续匹配。 */
+/** 当前登录用户的扩展视图：只暴露权限判定需要的字段。 */
+export interface ExtensionUser {
+  username?: string
+  permissions: string[]
+}
+
+export interface ExtensionRequest {
+  method: string
+  path: string
+  query: URLSearchParams
+  // 与既有扩展（组态 / 图纸）的形参保持一致：外壳已把非 GET 请求体收敛成对象。
+  body: Record<string, unknown>
+  /** 当前登录用户；公开路径为 null。扩展自己按权限码收紧。 */
+  user: ExtensionUser | null
+}
+
 export interface ApiExtension {
   /**
    * 返回值直接进 `data` 信封；返回 `null` 表示不处理。
@@ -63,12 +79,7 @@ export interface ApiExtension {
    * 也允许返回 Symbol 表示不处理（各业务域自带 `UNHANDLED` 哨兵），外壳同样跳过：
    * 否则第一个扩展的哨兵会被当成返回值，后面的扩展永远拿不到请求。
    */
-  handle(request: {
-    method: string
-    path: string
-    query: URLSearchParams
-    body: unknown
-  }): unknown | null
+  handle(request: ExtensionRequest): unknown | null
 }
 
 export interface AppDeps {
@@ -84,6 +95,11 @@ export interface AppDeps {
   staticDir?: string | undefined
   /** 页面配置写权限码，缺省 `system:page:config`。 */
   schemaWritePermission?: string | undefined
+  /**
+   * 免登录读取的扩展路径（例如外壳配置要在登录页之前生效）。
+   * 只放前言/外壳这类不含业务数据的 GET 接口，其余仍走令牌。
+   */
+  publicPaths?: string[] | undefined
 }
 
 type PageDataOf = Parameters<PageStore['write']>[0]
@@ -156,7 +172,7 @@ export function createApp(deps: AppDeps): CreatedApp {
 
     // 页面清单公开只读：宿主要在建路由之前知道有哪些页面。
     // 业务数据接口仍然逐个校验令牌。
-    const isPublic = isPublicPath(path, method)
+    const isPublic = isPublicPath(path, method) || (method === 'GET' && (deps.publicPaths ?? []).includes(path))
     const user = isPublic ? null : authenticate(token)
     if (!isPublic && !user) {
       return c.json(envelope(null, 401, '登录已失效，请重新登录'), 401)
@@ -188,7 +204,13 @@ export function createApp(deps: AppDeps): CreatedApp {
       if (handled !== ENGINE_UNHANDLED) return c.json(envelope(handled))
 
       for (const extension of extensions) {
-        const result = await extension.handle({ method, path, query: url.searchParams, body })
+        const result = await extension.handle({
+          method,
+          path,
+          query: url.searchParams,
+          body: (body && typeof body === 'object' ? body : {}) as Record<string, unknown>,
+          user: user ? { username: user.username, permissions: user.permissions } : null,
+        })
         // `null` 与 Symbol 哨兵都表示「这个扩展不处理」，交给下一个。
         if (result === null || typeof result === 'symbol') continue
         if (result instanceof RawResponse) {

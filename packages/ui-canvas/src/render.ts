@@ -162,3 +162,82 @@ export function overlayRegions(drawing: UiDrawing): OverlayRegion[] {
     }
   })
 }
+
+// ---------------------------------------------------------------------------
+// 外壳图纸线框：与页面图纸同一套渲染习惯，但按外壳角色着色与标注。
+//
+// 复用上面的 `rectAttrs` / `escapeXml` / `round` / `trim`，不维护第二套 SVG 生成。
+// ---------------------------------------------------------------------------
+
+import type { ShellDrawing, ShellElement, ShellRole } from './shell.ts'
+import { shellSpecOf } from './shell.ts'
+
+/** 外壳角色层级透明度：区域淡、元素实。 */
+function shellOpacityOf(role: ShellRole): number {
+  const layer = shellSpecOf(role).layer
+  if (layer === 'region') return 0.3
+  if (layer === 'band') return 0.75
+  return 0.95
+}
+
+function shellCaptionOf(element: ShellElement): string {
+  const props = { ...shellSpecOf(element.role).props, ...element.props }
+  const label = String(props.label ?? '').trim()
+  if (label) return label
+  if (element.text?.trim()) return element.text.trim()
+  return shellSpecOf(element.role).label
+}
+
+/** 把外壳图纸渲染成 SVG 字符串（九宫格缩略图 / 出图服务端）。 */
+export function renderShellWireframe(drawing: ShellDrawing, options: WireframeOptions = {}): string {
+  const canvas = drawing.canvas
+  const width = Math.max(1, canvas.width)
+  const height = Math.max(1, canvas.height)
+
+  let scale = options.scale && options.scale > 0 ? options.scale : 1
+  if (!options.scale && (options.maxWidth || options.maxHeight)) {
+    const fitWidth = options.maxWidth ? options.maxWidth / width : Number.POSITIVE_INFINITY
+    const fitHeight = options.maxHeight ? options.maxHeight / height : Number.POSITIVE_INFINITY
+    scale = Math.min(fitWidth, fitHeight, 1)
+  }
+
+  const viewWidth = round(width * scale)
+  const viewHeight = round(height * scale)
+  const grid = canvas.showGrid && canvas.grid > 0 && options.showGrid !== false ? canvas.grid : 0
+
+  const defs = grid
+    ? `<defs><pattern id="shc-grid" width="${round(grid * scale)}" height="${round(grid * scale)}" patternUnits="userSpaceOnUse">`
+      + `<path d="M ${round(grid * scale)} 0 L 0 0 0 ${round(grid * scale)}" fill="none" stroke="rgba(148,163,184,.18)" stroke-width="0.5"/></pattern></defs>`
+    : ''
+  const gridLayer = grid ? `<rect width="${viewWidth}" height="${viewHeight}" fill="url(#shc-grid)"/>` : ''
+
+  const elements = [...drawing.elements]
+    .filter((element) => element.visible !== false)
+    .sort((left, right) => left.zIndex - right.zIndex || left.id.localeCompare(right.id))
+
+  const body = elements.map((element) => {
+    const spec = shellSpecOf(element.role)
+    const rect = {
+      x: element.rect.x * scale,
+      y: element.rect.y * scale,
+      width: element.rect.width * scale,
+      height: element.rect.height * scale,
+    }
+    const opacity = shellOpacityOf(element.role)
+    const stroke = spec.layer === 'region' ? 'rgba(71,85,105,.65)' : 'rgba(71,85,105,.45)'
+    const shape = `<rect ${rectAttrs(rect)} rx="${spec.layer === 'region' ? 6 : 3}" fill="${spec.tint}" fill-opacity="${opacity}" stroke="${stroke}" stroke-width="1"/>`
+    if (options.showLabels === false) return shape
+    const fontSize = Math.max(8, Math.min(round(Math.min(rect.height * 0.5, 13)), 18))
+    const cx = round(rect.x + rect.width / 2)
+    const cy = round(rect.y + rect.height / 2 + fontSize * 0.35)
+    const text = `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="${fontSize}" fill="#0f172a" font-family="system-ui, sans-serif">${escapeXml(trim(shellCaptionOf(element), fontSize, rect.width))}</text>`
+    return shape + text
+  }).join('')
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewWidth}" height="${viewHeight}" viewBox="0 0 ${viewWidth} ${viewHeight}" role="img">`
+    + defs
+    + `<rect width="${viewWidth}" height="${viewHeight}" fill="${escapeXml(canvas.background || '#f8fafc')}"/>`
+    + gridLayer
+    + body
+    + '</svg>'
+}

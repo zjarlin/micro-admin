@@ -10,7 +10,7 @@ export { createSqliteStores } from './sqlite-store.ts'
 export type { ServerConfig } from './config.ts'
 export { corsOrigins, loadConfig } from './config.ts'
 
-export type { ApiExtension, AppDeps, CreatedApp, Envelope } from './app.ts'
+export type { ApiExtension, AppDeps, CreatedApp, Envelope, ExtensionRequest, ExtensionUser } from './app.ts'
 export { RawResponse, createApp, envelope } from './app.ts'
 
 export type { PageRegistry, PageStore, RuntimeStore } from '@zjarlin/data-page'

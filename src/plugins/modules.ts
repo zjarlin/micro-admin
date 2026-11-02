@@ -19,5 +19,6 @@ export const pluginModules: Record<string, PluginModuleRef> = {
   canvas: { file: '/src/plugins/canvas', export: 'canvasPlugin' },
   scada: { file: '/src/plugins/scada', export: 'scadaPlugin' },
   'ui-canvas': { file: '/src/plugins/ui-canvas', export: 'uiCanvasPlugin' },
+  shell: { file: '/src/plugins/shell', export: 'shellPlugin' },
   pages: { file: '/src/plugins/pages', export: 'pagesPlugin' },
 }

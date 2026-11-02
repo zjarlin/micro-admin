@@ -16,6 +16,7 @@ export const pluginProfiles = {
     'canvas',
     'scada',
     'ui-canvas',
+    'shell',
     'pages',
   ],
   desktop: ['core-admin', 'user', 'dict'],

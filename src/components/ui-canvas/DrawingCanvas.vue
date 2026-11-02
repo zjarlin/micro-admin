@@ -3,9 +3,10 @@
      几何求值复用 `@zjarlin/ui-canvas` 的角色表与区域装配，交互只做命中与拖拽，
      因此「编辑里看到的层叠顺序、区域归属」与编译时看到的是同一份数据。 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import type { UiDrawing, UiElement, UiElementFragment, UiRect, UiRole } from '@/shared/ui-canvas'
 import { isContainer, regionsOf, specOf } from '@/shared/ui-canvas'
+import { useCanvasInteraction } from '@/components/canvas/useCanvasInteraction'
 import CanvasContainerPreview from './CanvasContainerPreview.vue'
 import CanvasElementPreview from './CanvasElementPreview.vue'
 
@@ -29,21 +30,34 @@ const emit = defineEmits<{
   (event: 'open', id: string): void
 }>()
 
-const host = ref<SVGSVGElement | null>(null)
-const marquee = ref<UiRect | null>(null)
-
 const grid = computed(() => (props.drawing.canvas.grid > 0 ? props.drawing.canvas.grid : 0))
-const selectedSet = computed(() => new Set(props.selectedIds))
+
+/**
+ * 交互全部交给共享内核（`useCanvasInteraction`）：命中测试、框选、拖拽、缩放手柄、
+ * 坐标反算、吸附只有一份实现，外壳画布与页面画布共用同一套 CAD 手感。
+ */
+const interaction = useCanvasInteraction<UiElement>({
+  elements: () => props.drawing.elements.filter((element) => element.visible !== false),
+  selectedIds: () => props.selectedIds,
+  zoom: () => props.zoom,
+  snap: () => props.snap,
+  grid: () => grid.value,
+  onSelect: (ids) => emit('update:selectedIds', ids),
+  onRect: (id, rect) => emit('update', id, rect),
+  onOpen: (id) => emit('open', id),
+  onDropRole: (role, point) => emit('drop-role', role as UiRole, point),
+})
+
+const {
+  host, marquee, ordered, toCanvasPoint, onCanvasPointerDown, onDoubleClick,
+  onHandlePointerDown, onDrop, onDragOver, selectionBox, handlePoint, HANDLES, dispose,
+} = interaction
 
 const fragmentOf = computed<Record<string, UiElementFragment>>(() => {
   const map: Record<string, UiElementFragment> = {}
   for (const fragment of props.fragments ?? []) map[fragment.elementId] = fragment
   return map
 })
-
-const ordered = computed(() => [...props.drawing.elements]
-  .filter((element) => element.visible !== false)
-  .sort((left, right) => left.zIndex - right.zIndex || left.id.localeCompare(right.id)))
 
 /**
  * 由真实壳接管子元素的容器：表格 / 查询栏 / 表单 / 左树 / 分页。
@@ -97,6 +111,10 @@ const topLevel = computed(() => ordered.value.filter((element) => !absorbed.valu
 
 const regions = computed(() => regionsOf(props.drawing))
 
+function elementOf(id: string): UiElement | undefined {
+  return props.drawing.elements.find((element) => element.id === id)
+}
+
 /** 示例行：多行是为了让表格像真表（一行看不出斑马纹与行高），值全部来自图纸声明。 */
 const sampleRows = computed<Record<string, unknown>[]>(() => {
   const seeds = ['示例', '样例', '演示']
@@ -116,178 +134,6 @@ const sampleRows = computed<Record<string, unknown>[]>(() => {
     return row
   })
 })
-
-
-/** 画布坐标：与缩放无关，避免不同 zoom 下拖拽手感不同。 */
-function toCanvasPoint(event: PointerEvent | MouseEvent): { x: number; y: number } {
-  const svg = host.value
-  if (!svg) return { x: 0, y: 0 }
-  const box = svg.getBoundingClientRect()
-  return { x: (event.clientX - box.left) / props.zoom, y: (event.clientY - box.top) / props.zoom }
-}
-
-function snapValue(value: number): number {
-  if (!props.snap || grid.value <= 0) return Math.round(value)
-  return Math.round(value / grid.value) * grid.value
-}
-
-interface DragState {
-  mode: 'move' | 'resize' | 'marquee'
-  handle?: string
-  startX: number
-  startY: number
-  origin: Map<string, UiRect>
-  moved: boolean
-}
-
-let drag: DragState | null = null
-
-function elementOf(id: string): UiElement | undefined {
-  return props.drawing.elements.find((element) => element.id === id)
-}
-
-/** 容器排在后面：点容器空白处应选中容器，点元素优先选叶层。 */
-function hitTest(point: { x: number; y: number }): UiElement | null {
-  const sorted = [...ordered.value].reverse()
-  return sorted.find((element) =>
-    point.x >= element.rect.x && point.x <= element.rect.x + element.rect.width
-    && point.y >= element.rect.y && point.y <= element.rect.y + element.rect.height,
-  ) ?? null
-}
-
-function beginDrag(event: PointerEvent, mode: DragState['mode'], handle?: string): void {
-  const point = toCanvasPoint(event)
-  const origin = new Map<string, UiRect>()
-  for (const id of props.selectedIds) {
-    const target = elementOf(id)
-    if (target) origin.set(id, { ...target.rect })
-  }
-  drag = { mode, startX: point.x, startY: point.y, origin, moved: false, ...(handle ? { handle } : {}) }
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', onPointerUp)
-}
-
-function onCanvasPointerDown(event: PointerEvent): void {
-  const point = toCanvasPoint(event)
-  const hit = hitTest(point)
-  if (!hit) {
-    // 空白处起框选；已选中多个时不再清空，避免误操作丢选择。
-    emit('update:selectedIds', [])
-    marquee.value = { x: point.x, y: point.y, width: 0, height: 0 }
-    beginDrag(event, 'marquee')
-    return
-  }
-  const ids = event.shiftKey
-    ? (selectedSet.value.has(hit.id) ? props.selectedIds.filter((id) => id !== hit.id) : [...props.selectedIds, hit.id])
-    : (selectedSet.value.has(hit.id) ? props.selectedIds : [hit.id])
-  emit('update:selectedIds', ids)
-  if (hit.locked) return
-  beginDrag(event, 'move')
-}
-
-function onDoubleClick(event: MouseEvent): void {
-  const hit = hitTest(toCanvasPoint(event))
-  if (hit) emit('open', hit.id)
-}
-
-function onHandlePointerDown(event: PointerEvent, handle: string): void {
-  event.stopPropagation()
-  beginDrag(event, 'resize', handle)
-}
-
-function onPointerMove(event: PointerEvent): void {
-  if (!drag) return
-  const point = toCanvasPoint(event)
-  const dx = point.x - drag.startX
-  const dy = point.y - drag.startY
-  if (!drag.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return
-  drag.moved = true
-
-  if (drag.mode === 'marquee' && marquee.value) {
-    marquee.value = {
-      x: Math.min(drag.startX, point.x),
-      y: Math.min(drag.startY, point.y),
-      width: Math.abs(point.x - drag.startX),
-      height: Math.abs(point.y - drag.startY),
-    }
-    return
-  }
-
-  for (const [id, origin] of drag.origin) {
-    const next = drag.mode === 'move'
-      ? { x: snapValue(origin.x + dx), y: snapValue(origin.y + dy), width: origin.width, height: origin.height }
-      : resizeRect(origin, drag.handle ?? 'se', dx, dy)
-    emit('update', id, next)
-  }
-}
-
-function resizeRect(origin: UiRect, handle: string, dx: number, dy: number): UiRect {
-  let { x, y, width, height } = origin
-  if (handle.includes('e')) width = Math.max(12, snapValue(width + dx))
-  if (handle.includes('s')) height = Math.max(12, snapValue(height + dy))
-  if (handle.includes('w')) {
-    const nextWidth = Math.max(12, snapValue(width - dx))
-    x = snapValue(x + (width - nextWidth))
-    width = nextWidth
-  }
-  if (handle.includes('n')) {
-    const nextHeight = Math.max(12, snapValue(height - dy))
-    y = snapValue(y + (height - nextHeight))
-    height = nextHeight
-  }
-  return { x, y, width, height }
-}
-
-function onPointerUp(): void {
-  window.removeEventListener('pointermove', onPointerMove)
-  window.removeEventListener('pointerup', onPointerUp)
-  if (drag?.mode === 'marquee' && marquee.value) {
-    const box = marquee.value
-    const ids = ordered.value
-      .filter((element) =>
-        element.rect.x < box.x + box.width && element.rect.x + element.rect.width > box.x
-        && element.rect.y < box.y + box.height && element.rect.y + element.rect.height > box.y)
-      .map((element) => element.id)
-    if (ids.length) emit('update:selectedIds', ids)
-    marquee.value = null
-  }
-  drag = null
-}
-
-function onDrop(event: DragEvent): void {
-  const role = event.dataTransfer?.getData('application/x-ui-role') as UiRole | undefined
-  if (!role) return
-  event.preventDefault()
-  emit('drop-role', role, toCanvasPoint(event as unknown as MouseEvent))
-}
-
-function onDragOver(event: DragEvent): void {
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-}
-
-/** 选中框与手柄：位置由被选元素的并集包围盒决定，多选时也能整体缩放。 */
-const selectionBox = computed(() => {
-  const rects = props.selectedIds
-    .map((id) => elementOf(id)?.rect)
-    .filter((rect): rect is UiRect => Boolean(rect))
-  if (!rects.length) return null
-  const left = Math.min(...rects.map((rect) => rect.x))
-  const top = Math.min(...rects.map((rect) => rect.y))
-  const right = Math.max(...rects.map((rect) => rect.x + rect.width))
-  const bottom = Math.max(...rects.map((rect) => rect.y + rect.height))
-  return { x: left, y: top, width: right - left, height: bottom - top }
-})
-
-const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
-
-function handlePoint(handle: string): { x: number; y: number } {
-  const box = selectionBox.value
-  if (!box) return { x: 0, y: 0 }
-  const x = handle.includes('w') ? box.x : handle.includes('e') ? box.x + box.width : box.x + box.width / 2
-  const y = handle.includes('n') ? box.y : handle.includes('s') ? box.y + box.height : box.y + box.height / 2
-  return { x, y }
-}
 
 /**
  * 元素定位：1:1 按图纸矩形摆放，**缩放由外层 transform 统一施加**。
@@ -317,12 +163,9 @@ const surfaceStyle = computed(() => ({
 const handleSize = computed(() => 8 / props.zoom)
 const strokeWidth = computed(() => 1.5 / props.zoom)
 
-onBeforeUnmount(() => {
-  window.removeEventListener('pointermove', onPointerMove)
-  window.removeEventListener('pointerup', onPointerUp)
-})
+onBeforeUnmount(() => dispose())
 
-defineExpose({ toCanvasPoint })
+defineExpose({ toCanvasPoint, host })
 </script>
 
 <template>

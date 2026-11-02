@@ -10,3 +10,8 @@ coverage/
 .vite/
 *.tsbuildinfo
 .run/
+
+# 部署参数：只有 .env.example 进版本库，真实值留在机器上（0600）。
+deploy/.env
+deploy/.env.*
+!deploy/.env.example

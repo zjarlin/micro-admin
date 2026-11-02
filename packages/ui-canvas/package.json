@@ -18,7 +18,8 @@
     "./compile": "./src/compile.ts",
     "./layout": "./src/layout.ts",
     "./render": "./src/render.ts",
-    "./vibe": "./src/vibe.ts"
+    "./vibe": "./src/vibe.ts",
+    "./shell": "./src/shell.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -49,6 +50,10 @@
       "./vibe": {
         "types": "./dist/vibe.d.ts",
         "default": "./dist/vibe.js"
+      },
+      "./shell": {
+        "types": "./dist/shell.d.ts",
+        "default": "./dist/shell.js"
       }
     }
   }
