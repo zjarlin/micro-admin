@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
-  ArrowLeftBold, ArrowRightBold, Bell, Expand, Fold, Grid, Moon, Search, Sunny, SwitchButton,
+  ArrowLeftBold, ArrowRightBold, Bell, Expand, Fold, Moon, Search, Sunny, SwitchButton,
 } from '@element-plus/icons-vue'
 import { filterByPermission, type MenuContribution } from '@/kernel'
 import { getKernel } from '@/router'
@@ -55,7 +55,6 @@ const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.m
  * 不要外壳的 28px 边距与滚动条——滚动交给页面自己，否则画布永远少一截。
  */
 const fullBleed = computed(() => route.meta.fullBleed === true)
-const enabledPlugins = computed(() => kernelStore.statuses.filter((item) => item.enabled).length)
 
 onMounted(() => {
   const kernel = getKernel()
@@ -130,10 +129,6 @@ function toggleTheme(): void {
 
         <div class="topbar-right">
           <el-input v-model="quickSearch" class="menu-search" placeholder="搜索菜单" :prefix-icon="Search" clearable />
-          <router-link to="/plugins" class="plugin-pill" title="插件中心">
-            <el-icon><Grid /></el-icon>
-            <span>{{ enabledPlugins }} 个插件运行中</span>
-          </router-link>
           <el-tooltip :content="ui.dark ? '切换浅色' : '切换深色'" placement="bottom">
             <el-button circle text @click="toggleTheme">
               <el-icon :size="17"><Sunny v-if="ui.dark" /><Moon v-else /></el-icon>
@@ -216,8 +211,6 @@ function toggleTheme(): void {
 .breadcrumb i { font-style: normal; color: var(--line-strong); }
 .breadcrumb strong { color: var(--app-text); font-weight: 600; }
 .menu-search { width: 190px; }
-.plugin-pill { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; text-decoration: none; white-space: nowrap; }
-.plugin-pill:hover { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
 .user-chip { display: flex; align-items: center; gap: 9px; background: transparent; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 9px; }
 .user-chip:hover { background: var(--hover); }
 .avatar { width: 34px; height: 34px; border-radius: 50%; background: #0f172a; color: white; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
@@ -232,6 +225,6 @@ function toggleTheme(): void {
 .page-fade-enter-active, .page-fade-leave-active { transition: opacity .16s ease, transform .16s ease; }
 .page-fade-enter-from { opacity: 0; transform: translateY(5px); }
 .page-fade-leave-to { opacity: 0; }
-@media (max-width: 1100px) { .menu-search { display: none; } .plugin-pill span { display: none; } }
+@media (max-width: 1100px) { .menu-search { display: none; } }
 @media (max-width: 760px) { .sidebar { position: fixed; left: 0; top: 0; } .is-collapsed .sidebar { transform: translateX(-100%); } .topbar { padding: 0 16px; } .content-area { padding: 16px; } .breadcrumb span, .breadcrumb i { display: none; } .user-meta { display: none; } }
 </style>
