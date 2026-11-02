@@ -15,7 +15,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, Delete, DocumentAdd, FullScreen, Link, MagicStick, MoreFilled, Promotion,
-  Setting, SortDown, SortUp, Stamp, View, ZoomIn, ZoomOut,
+  SortDown, SortUp, Stamp, View, ZoomIn, ZoomOut,
 } from '@element-plus/icons-vue'
 import { useService } from '@/shared/service'
 import type { HttpClient } from '@/shared/http'
@@ -166,12 +166,9 @@ function markDirty(): void {
   dirty.value = true
 }
 
-/** 工具条「更多」的二级动作：页面设置 / 运行预览 / 编译 / 下线。 */
+/** 「更多」里只放工具条没有的唯一动作：下线。其余入口（页面设置 / 预览 / 编译）各自只有一个按钮。 */
 function onMore(command: string): void {
-  if (command === 'settings') openInspector('props')
-  else if (command === 'run') openRun()
-  else if (command === 'compile') openInspector('compile')
-  else if (command === 'unpublish') void unpublish()
+  if (command === 'unpublish') void unpublish()
 }
 
 // ---------------- 画布交互 ----------------
@@ -604,7 +601,7 @@ onBeforeUnmount(() => {
       </el-tooltip>
       <el-tooltip content="编译检查与诊断" placement="bottom" :show-after="400">
         <button class="dz-icon" type="button" @click="openInspector('compile')">
-          <el-icon :size="15"><Setting /></el-icon>
+          <el-icon :size="15"><Stamp /></el-icon>
           <span v-if="diagnostics.length" class="dz-badge" :class="{ 'is-danger': errors.length }">{{ diagnostics.length }}</span>
         </button>
       </el-tooltip>
@@ -631,14 +628,11 @@ onBeforeUnmount(() => {
 
       <button class="dz-btn" type="button" :disabled="saving" @click="save">保存</button>
       <button class="dz-btn dz-btn--primary" type="button" :disabled="publishing" @click="publish">发布</button>
-      <el-dropdown trigger="click" @command="onMore">
-        <button class="dz-icon" type="button" title="更多"><el-icon :size="15"><MoreFilled /></el-icon></button>
+      <el-dropdown v-if="compileResult?.key" trigger="click" @command="onMore">
+        <button class="dz-icon" type="button" title="更多（下线页面）"><el-icon :size="15"><MoreFilled /></el-icon></button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="settings" :icon="Setting">页面设置</el-dropdown-item>
-            <el-dropdown-item command="run" :icon="View">运行预览</el-dropdown-item>
-            <el-dropdown-item command="compile" :icon="Stamp">编译结果</el-dropdown-item>
-            <el-dropdown-item v-if="compileResult?.key" command="unpublish" divided :icon="Delete">下线页面</el-dropdown-item>
+            <el-dropdown-item command="unpublish" :icon="Delete">下线页面</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
