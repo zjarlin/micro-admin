@@ -27,8 +27,8 @@ importers:
         specifier: workspace:*
         version: link:packages/nav-tree
       '@addzero/permission-meta':
-        specifier: workspace:*
-        version: link:packages/permission-meta
+        specifier: file:vendor/addzero-permission-meta-0.1.0.tgz
+        version: file:vendor/addzero-permission-meta-0.1.0.tgz(vite@8.3.5(@types/node@24.19.2)(sass@1.106.1))(vue@3.5.44(typescript@5.9.3))
       '@addzero/scada-dsl':
         specifier: workspace:*
         version: link:packages/scada-dsl
@@ -144,15 +144,6 @@ importers:
         specifier: ^3.5.0
         version: 3.5.44(typescript@5.9.3)
 
-  packages/permission-meta:
-    dependencies:
-      vite:
-        specifier: ^7.0.0 || ^8.0.0
-        version: 8.3.5(@types/node@24.19.2)(sass@1.106.1)
-      vue:
-        specifier: ^3.5.0
-        version: 3.5.44(typescript@5.9.3)
-
   packages/scada-dsl: {}
 
   packages/source-locator:
@@ -186,6 +177,13 @@ importers:
         version: 4.6.7
 
 packages:
+
+  '@addzero/permission-meta@file:vendor/addzero-permission-meta-0.1.0.tgz':
+    resolution: {integrity: sha512-aSATJY6cfYK8gy6pV5d8PktHlzgb0gPu9viYppqStQz6x3KMM2wHrNKXEqc/TfJcbc4PfwJyIdl2LWBaS2RmBw==, tarball: file:vendor/addzero-permission-meta-0.1.0.tgz}
+    version: 0.1.0
+    peerDependencies:
+      vite: ^7.0.0 || ^8.0.0
+      vue: ^3.5.0
 
   '@asamuzakjp/css-color@7.1.9':
     resolution: {integrity: sha512-vZ6JQVq8Ivgz6b/IBlAf90wZviXdluY13cQOPO+nJHbmXwGrPl2GcpqUY7a55/8ZVdfONXpCFMpRijOBCHNlcQ==}
@@ -1134,6 +1132,11 @@ packages:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
+
+  '@addzero/permission-meta@file:vendor/addzero-permission-meta-0.1.0.tgz(vite@8.3.5(@types/node@24.19.2)(sass@1.106.1))(vue@3.5.44(typescript@5.9.3))':
+    dependencies:
+      vite: 8.3.5(@types/node@24.19.2)(sass@1.106.1)
+      vue: 3.5.44(typescript@5.9.3)
 
   '@asamuzakjp/css-color@7.1.9':
     dependencies:

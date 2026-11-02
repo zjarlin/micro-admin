@@ -16,4 +16,3 @@ deploy/.env
 
 # permission-meta：编译期产物（每个项目自己生成，不进仓库）
 meta-tree.json
-packages/*/examples/dist/

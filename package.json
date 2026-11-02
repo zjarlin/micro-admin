@@ -16,8 +16,7 @@
     "verify": "pnpm typecheck && pnpm test && pnpm build",
     "dev:server": "node --env-file-if-exists=.env.local server/main.ts",
     "start:server": "node server/main.ts",
-    "typecheck:server": "tsc -b server",
-    "demo:meta": "pnpm --filter @addzero/permission-meta demo:build"
+    "typecheck:server": "tsc -b server"
   },
   "dependencies": {
     "@addzero/app-frame": "workspace:*",
@@ -26,7 +25,7 @@
     "@addzero/data-page-element": "workspace:*",
     "@addzero/ifc-canvas": "workspace:*",
     "@addzero/nav-tree": "workspace:*",
-    "@addzero/permission-meta": "workspace:*",
+    "@addzero/permission-meta": "file:vendor/addzero-permission-meta-0.1.0.tgz",
     "@addzero/scada-dsl": "workspace:*",
     "@addzero/source-locator": "workspace:*",
     "@addzero/ui-canvas": "workspace:*",

@@ -36,9 +36,6 @@
     },
     {
       "path": "./packages/source-locator"
-    },
-    {
-      "path": "./packages/permission-meta"
     }
   ]
 }
