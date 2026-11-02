@@ -121,13 +121,18 @@ async function open(): Promise<void> {
   try {
     menus.value = await http.request<Row[]>('/system/menus')
     nodes.value = toNodes(menus.value)
-    await nextTick()
-    // 回显放在数据渲染之后：树还没挂载时 setCheckedKeys 会被静默忽略。
-    treeRef.value?.setCheckedKeys(authorized.value, false)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '菜单加载失败'
   } finally {
     loading.value = false
+  }
+  // 回显必须在「骨架屏已让位、el-tree 真正挂载」之后：加载中渲染的是 el-skeleton，
+  // 此时 treeRef 还是 undefined，setCheckedKeys 会被静默丢弃，抽屉会显示成「一个都没选」，
+  // 保存一次就把角色的授权清空。等两拍：一拍换掉骨架屏，一拍让 el-tree 完成内部初始化。
+  if (error.value === null) {
+    await nextTick()
+    await nextTick()
+    treeRef.value?.setCheckedKeys(authorized.value, false)
   }
 }
 
