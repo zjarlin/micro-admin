@@ -230,7 +230,7 @@ const inspectorHint = computed(() => {
 /**
  * 右栏是「属性 / AI」共用的同一块位置：同一时刻只开一个，关掉即一像素不留。
  *
- * 为什么不做成外壳右栏（mka 的 app-frame）：本仓库的外壳由图纸下发（`ShellFrame.vue`），
+ * 为什么不做成外壳右栏：本仓库的外壳由图纸下发（`ShellFrame.vue`），
  * 没有可 Teleport 的固定右栏宿主；组态右栏又只有本页用，做成页内 aside 反而更简单。
  */
 const sidePanel = ref<'none' | 'inspector' | 'ai'>('none')

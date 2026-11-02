@@ -46,7 +46,7 @@ export interface PickedDetail {
   schemaKeys: string[]
   /** 组件链上出现过的路由名（容器组件把它写进 props 时才有）。 */
   routeNames: string[]
-  /** 元素选择器路径，例如 `main .app-frame > section.page > h1`。 */
+  /** 元素选择器路径，例如 `main > section.page > h1`。 */
   path: string
   /** 同一 basename 对应多个源码文件时的候选（生产构建会压成 basename）。 */
   candidates: string[]

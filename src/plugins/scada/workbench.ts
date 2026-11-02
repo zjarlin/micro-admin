@@ -4,8 +4,8 @@
 // 也不该复制一份画布状态。页面在挂载时把自己的读写能力挂到这里，其它插件按接口取用；
 // 页面卸载即解绑，插件据此判断「当前有没有画布可用」。
 //
-// 本仓库的外壳由图纸下发，没有 app-frame 右栏，因此这里只保留「读写画布」这一件事：
-// 右栏开关属于页面自己的事（`sidePanel`），不需要跨插件协作。
+// 外壳由图纸下发（见 `ShellFrame.vue`），组态右栏是页面自己的事（`sidePanel`），
+// 因此这个句柄只保留「读写画布」这一件事，不需要跨插件协作开合右栏。
 import { computed, ref } from 'vue'
 import type { ScadaDocument, ScadaSymbolDefinition, ScadaTagOption } from '@/shared/scada/types'
 
